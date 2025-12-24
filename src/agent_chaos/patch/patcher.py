@@ -106,6 +106,8 @@ class ChaosPatcher:
                 call_id = metrics.start_call("anthropic")
                 injector.increment_call()
 
+                # Apply context and tool mutations
+                kwargs = _maybe_mutate_context(kwargs, injector, metrics)
                 kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
@@ -204,6 +206,8 @@ class ChaosPatcher:
                 call_id = metrics.start_call("anthropic")
                 injector.increment_call()
 
+                # Apply context and tool mutations
+                kwargs = _maybe_mutate_context(kwargs, injector, metrics)
                 kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
@@ -354,6 +358,26 @@ def _maybe_record_anthropic_tool_results_in_request(
         pass
 
 
+def _maybe_mutate_context(
+    kwargs: dict, injector: ChaosInjector, metrics: MetricsStore
+) -> dict:
+    """Apply context chaos to mutate the messages array."""
+    messages = kwargs.get("messages", [])
+    if not messages:
+        return kwargs
+
+    if chaos_result := injector.next_context_chaos(messages):
+        if chaos_result.mutated is not None:
+            metrics.record_fault(
+                "context_mutation",
+                "mutated messages",
+                provider="anthropic",
+            )
+            return {**kwargs, "messages": chaos_result.mutated}
+
+    return kwargs
+
+
 def _execute_with_chaos_sync(
     execute_fn: Callable[[dict], Any],
     injector: ChaosInjector,
@@ -364,7 +388,10 @@ def _execute_with_chaos_sync(
     call_id = metrics.start_call("anthropic")
     injector.increment_call()
 
-    mutated_kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
+    # Apply context mutation first (messages array)
+    mutated_kwargs = _maybe_mutate_context(kwargs, injector, metrics)
+    # Then apply tool result mutations
+    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, metrics)
     _maybe_record_anthropic_tool_results_in_request(
         metrics, mutated_kwargs, current_call_id=call_id
     )
@@ -397,7 +424,10 @@ async def _execute_with_chaos_async(
     call_id = metrics.start_call("anthropic")
     injector.increment_call()
 
-    mutated_kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
+    # Apply context mutation first (messages array)
+    mutated_kwargs = _maybe_mutate_context(kwargs, injector, metrics)
+    # Then apply tool result mutations
+    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, metrics)
     _maybe_record_anthropic_tool_results_in_request(
         metrics, mutated_kwargs, current_call_id=call_id
     )
@@ -425,8 +455,21 @@ def _mutate_anthropic_tool_results(
 ) -> dict:
     """Mutate tool_result blocks in messages using new chaos system."""
     messages = kwargs.get("messages", [])
-    mutated_messages = []
 
+    # Build tool_use_id -> tool_name mapping from assistant messages
+    tool_id_to_name: dict[str, str] = {}
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_id = block.get("id", "")
+                        tool_name = block.get("name", "unknown")
+                        if tool_id:
+                            tool_id_to_name[tool_id] = tool_name
+
+    mutated_messages = []
     for msg in messages:
         if isinstance(msg, dict) and msg.get("role") == "user":
             content = msg.get("content", [])
@@ -434,7 +477,9 @@ def _mutate_anthropic_tool_results(
                 mutated_content = []
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
-                        tool_name = block.get("tool_use_id", "unknown")
+                        tool_use_id = block.get("tool_use_id", "")
+                        # Look up the actual tool name from the mapping
+                        tool_name = tool_id_to_name.get(tool_use_id, tool_use_id)
                         original_result = block.get("content", "")
                         if isinstance(original_result, list):
                             original_result = json.dumps(original_result)

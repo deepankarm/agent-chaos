@@ -79,7 +79,11 @@ def run_scenario(
         ) as ctx:
             trace_id = ctx.session_id
             try:
-                ctx.result = _run_maybe_await(_run_agent(scenario.agent, ctx))
+                result = _run_maybe_await(_run_agent(scenario.agent, ctx))
+                ctx.result = result
+                # Capture agent output for debugging
+                if result is not None:
+                    ctx.agent_output = str(result)
             except Exception as e:
                 # Preserve context/metrics but allow assertions to reason about expected failures.
                 ctx.error = f"{type(e).__name__}: {e}"
@@ -145,11 +149,16 @@ def run_scenario(
                 "success_rate": ctx.metrics.success_rate,
                 "avg_ttft_s": ctx.metrics.avg_ttft,
             }
+        # Store ctx values before exiting the with block
+        agent_input = ctx.agent_input
+        agent_output = ctx.agent_output
     except Exception as e:
         # Only errors outside the chaos_context setup/teardown land here.
         elapsed_s = time.monotonic() - start
         error = f"{type(e).__name__}: {e}"
         passed = False
+        agent_input = None
+        agent_output = None
         scorecard = {
             "trace_id": trace_id,
             "scenario": scenario.name,
@@ -167,6 +176,8 @@ def run_scenario(
         error=scorecard.get("error"),
         scorecard=scorecard,
         meta=scenario.meta,
+        agent_input=agent_input,
+        agent_output=agent_output,
     )
 
     if run_dir is not None:

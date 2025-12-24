@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🃏 agent-chaos</title>
+    <link rel="stylesheet" href="/static/styles.v2.css?v=1">
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon">🃏</span>
+                <span class="logo-text">agent-chaos</span>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="summary-bar" id="summaryBar">
+                <div class="summary-item">
+                    <span class="summary-value" id="totalScenarios">0</span>
+                    <span class="summary-label">scenarios</span>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="summary-item passed">
+                    <span class="summary-value" id="passedCount">0</span>
+                    <span class="summary-label">passed</span>
+                </div>
+                <div class="summary-item failed">
+                    <span class="summary-value" id="failedCount">0</span>
+                    <span class="summary-label">failed</span>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="chaos-pills" id="chaosPills">
+                    <!-- Dynamically populated: [LLM: 6/7] [Tool: 5/5] etc -->
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="filter-bar">
+                <select id="filterStatus" class="filter-select">
+                    <option value="all">All</option>
+                    <option value="passed">Passed</option>
+                    <option value="failed">Failed</option>
+                </select>
+                <select id="groupBy" class="filter-select">
+                    <option value="none">No grouping</option>
+                    <option value="chaos_type">By chaos type</option>
+                    <option value="kind">By kind</option>
+                </select>
+            </div>
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
+                🌙
+            </button>
+            <div class="status-badge disconnected" id="statusBadge">
+                <div class="status-dot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+    
+    <main class="main">
+        <div id="scenarioGroups">
+            <!-- Scenario cards will be rendered here -->
+        </div>
+        
+        <div class="empty-state" id="emptyState">
+            <div class="icon">🎲</div>
+            <h2>Waiting for chaos...</h2>
+            <p>Run your agent with <code>agent-chaos run scenario.py</code></p>
+        </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <div class="modal hidden" id="detailModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-panel">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">Scenario Details</div>
+                <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Full details rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.v2.js?v=1"></script>
+</body>
+</html>
+

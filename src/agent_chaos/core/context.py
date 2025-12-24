@@ -26,6 +26,8 @@ class ChaosContext:
         self.result: Any | None = None
         self.error: str | None = None
         self.elapsed_s: float | None = None
+        self.agent_input: str | None = None
+        self.agent_output: str | None = None
 
 
 @contextmanager

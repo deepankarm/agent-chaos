@@ -19,6 +19,8 @@ class RunReport:
     error: str | None = None
     scorecard: dict[str, Any] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
+    agent_input: str | None = None
+    agent_output: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

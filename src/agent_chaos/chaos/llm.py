@@ -140,7 +140,13 @@ class ContextLengthChaos(LLMChaos):
         if provider == "anthropic":
             import anthropic
 
-            return anthropic.InvalidRequestError(
+            # BadRequestError in newer versions, InvalidRequestError in older
+            exc_class = getattr(
+                anthropic,
+                "BadRequestError",
+                getattr(anthropic, "InvalidRequestError", anthropic.APIError),
+            )
+            return exc_class(
                 self.message,
                 response=_fake_response(400),
                 body={

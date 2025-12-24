@@ -139,7 +139,7 @@ def tool_timeout(timeout_seconds: float = 30.0) -> ChaosBuilder:
     return ChaosBuilder(ToolTimeoutChaos, timeout_seconds=timeout_seconds)
 
 
-def tool_mutate(fn: ToolMutator | ToolMutatorWithCtx) -> ToolMutateChaos:
+def tool_mutate(fn: ToolMutator | ToolMutatorWithCtx) -> ChaosBuilder:
     """Create a custom tool mutation chaos.
 
     Args:
@@ -155,4 +155,4 @@ def tool_mutate(fn: ToolMutator | ToolMutatorWithCtx) -> ToolMutateChaos:
 
         chaos = [tool_mutate(my_mutator)]
     """
-    return ToolMutateChaos(mutator=fn)
+    return ChaosBuilder(ToolMutateChaos, mutator=fn)
