@@ -286,6 +286,10 @@ function renderScenarioCard(trace) {
     // Assertions
     const assertions = report.assertion_results || [];
 
+    // Error (truncated for card view)
+    const error = report.error || null;
+    const errorPreview = error ? (error.length > 80 ? error.substring(0, 80) + '...' : error) : null;
+
     return `
         <div class="scenario-card ${passed ? 'passed' : 'failed'} ${expanded ? 'expanded' : ''}" 
              data-trace-id="${trace.trace_id}">
@@ -296,6 +300,7 @@ function renderScenarioCard(trace) {
                 <div class="card-content">
                     <div class="card-title">${escapeHtml(trace.name)}</div>
                     <div class="card-narrative">${escapeHtml(narrative)}</div>
+                    ${errorPreview ? `<div class="card-error">⚠️ ${escapeHtml(errorPreview)}</div>` : ''}
                 </div>
                 <div class="card-meta">
                     <div class="card-pills">${pillsHtml}</div>
