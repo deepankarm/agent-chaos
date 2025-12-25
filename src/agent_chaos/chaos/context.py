@@ -58,6 +58,17 @@ class ContextMutateChaos(ContextChaos):
     mutator: ContextMutator | ContextMutatorWithCtx | None = None
     _accepts_ctx: bool = field(init=False, default=False)
 
+    def __str__(self) -> str:
+        fn_name = (
+            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+        )
+        trigger = ""
+        if self.on_call is not None:
+            trigger = f" on call {self.on_call}"
+        elif self.after_calls is not None:
+            trigger = f" after {self.after_calls} calls"
+        return f"context_mutate[{fn_name}]{trigger}"
+
     def __post_init__(self):
         super().__post_init__()
         # Detect if mutator accepts ChaosContext

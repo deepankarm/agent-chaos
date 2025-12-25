@@ -61,6 +61,19 @@ class RateLimitChaos(LLMChaos):
     retry_after: float = 30.0
     message: str = "Rate limit exceeded"
 
+    def __str__(self) -> str:
+        trigger = self._describe_trigger()
+        return f"llm_rate_limit({self.retry_after}s){trigger}"
+
+    def _describe_trigger(self) -> str:
+        if self.on_call is not None:
+            return f" on call {self.on_call}"
+        if self.after_calls is not None:
+            return f" after {self.after_calls} calls"
+        if self.probability is not None and self.probability < 1.0:
+            return f" @{int(self.probability * 100)}%"
+        return ""
+
     def to_exception(self, provider: str) -> Exception:
         if provider == "anthropic":
             import anthropic
@@ -80,6 +93,19 @@ class TimeoutChaos(LLMChaos):
     delay: float = 30.0
     message: str = "Request timed out"
 
+    def __str__(self) -> str:
+        trigger = self._describe_trigger()
+        return f"llm_timeout({self.delay}s){trigger}"
+
+    def _describe_trigger(self) -> str:
+        if self.on_call is not None:
+            return f" on call {self.on_call}"
+        if self.after_calls is not None:
+            return f" after {self.after_calls} calls"
+        if self.probability is not None and self.probability < 1.0:
+            return f" @{int(self.probability * 100)}%"
+        return ""
+
     def to_exception(self, provider: str) -> Exception:
         if provider == "anthropic":
             import anthropic
@@ -94,6 +120,19 @@ class ServerErrorChaos(LLMChaos):
 
     status_code: int = 500
     message: str = "Internal server error"
+
+    def __str__(self) -> str:
+        trigger = self._describe_trigger()
+        return f"llm_server_error({self.status_code}){trigger}"
+
+    def _describe_trigger(self) -> str:
+        if self.on_call is not None:
+            return f" on call {self.on_call}"
+        if self.after_calls is not None:
+            return f" after {self.after_calls} calls"
+        if self.probability is not None and self.probability < 1.0:
+            return f" @{int(self.probability * 100)}%"
+        return ""
 
     def to_exception(self, provider: str) -> Exception:
         if provider == "anthropic":
@@ -115,6 +154,19 @@ class AuthErrorChaos(LLMChaos):
 
     message: str = "Invalid API key"
 
+    def __str__(self) -> str:
+        trigger = self._describe_trigger()
+        return f"llm_auth_error{trigger}"
+
+    def _describe_trigger(self) -> str:
+        if self.on_call is not None:
+            return f" on call {self.on_call}"
+        if self.after_calls is not None:
+            return f" after {self.after_calls} calls"
+        if self.probability is not None and self.probability < 1.0:
+            return f" @{int(self.probability * 100)}%"
+        return ""
+
     def to_exception(self, provider: str) -> Exception:
         if provider == "anthropic":
             import anthropic
@@ -135,6 +187,19 @@ class ContextLengthChaos(LLMChaos):
 
     max_tokens: int = 200000
     message: str = "Context length exceeded"
+
+    def __str__(self) -> str:
+        trigger = self._describe_trigger()
+        return f"llm_context_length({self.max_tokens}){trigger}"
+
+    def _describe_trigger(self) -> str:
+        if self.on_call is not None:
+            return f" on call {self.on_call}"
+        if self.after_calls is not None:
+            return f" after {self.after_calls} calls"
+        if self.probability is not None and self.probability < 1.0:
+            return f" @{int(self.probability * 100)}%"
+        return ""
 
     def to_exception(self, provider: str) -> Exception:
         if provider == "anthropic":

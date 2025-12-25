@@ -366,11 +366,12 @@ def _maybe_mutate_context(
     if not messages:
         return kwargs
 
-    if chaos_result := injector.next_context_chaos(messages):
+    if result := injector.next_context_chaos(messages):
+        chaos_result, chaos_obj = result
         if chaos_result.mutated is not None:
             metrics.record_fault(
                 "context_mutation",
-                "mutated messages",
+                chaos_obj,
                 provider="anthropic",
             )
             return {**kwargs, "messages": chaos_result.mutated}
@@ -486,14 +487,15 @@ def _mutate_anthropic_tool_results(
                         elif not isinstance(original_result, str):
                             original_result = str(original_result)
 
-                        if chaos_result := injector.next_tool_chaos(
+                        if result := injector.next_tool_chaos(
                             tool_name, original_result
                         ):
+                            chaos_result, chaos_obj = result
                             if chaos_result.mutated is not None:
                                 block = {**block, "content": chaos_result.mutated}
                                 metrics.record_fault(
                                     "tool_mutation",
-                                    f"mutated {tool_name}",
+                                    chaos_obj,
                                     provider="anthropic",
                                 )
                     mutated_content.append(block)

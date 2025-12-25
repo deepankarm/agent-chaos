@@ -63,6 +63,10 @@ class ToolErrorChaos(ToolChaos):
 
     message: str = "Tool error"
 
+    def __str__(self) -> str:
+        target = f"({self.tool_name})" if self.tool_name else "(all)"
+        return f"tool_error{target}"
+
     def apply(self, **kwargs: Any) -> ChaosResult:
         result = f'{{"error": "{self.message}"}}'
         return ChaosResult.mutate(result)
@@ -71,6 +75,10 @@ class ToolErrorChaos(ToolChaos):
 @dataclass
 class ToolEmptyChaos(ToolChaos):
     """Replace tool result with empty result."""
+
+    def __str__(self) -> str:
+        target = f"({self.tool_name})" if self.tool_name else "(all)"
+        return f"tool_empty{target}"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         return ChaosResult.mutate("")
@@ -81,6 +89,10 @@ class ToolTimeoutChaos(ToolChaos):
     """Replace tool result with timeout message."""
 
     timeout_seconds: float = 30.0
+
+    def __str__(self) -> str:
+        target = f"({self.tool_name})" if self.tool_name else "(all)"
+        return f"tool_timeout({self.timeout_seconds}s){target}"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         result = f"Tool execution timed out after {self.timeout_seconds}s"
@@ -93,6 +105,13 @@ class ToolMutateChaos(ToolChaos):
 
     mutator: ToolMutator | ToolMutatorWithCtx | None = None
     _accepts_ctx: bool = field(init=False, default=False)
+
+    def __str__(self) -> str:
+        target = f"({self.tool_name})" if self.tool_name else "(all)"
+        fn_name = (
+            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+        )
+        return f"tool_mutate[{fn_name}]{target}"
 
     def __post_init__(self):
         super().__post_init__()

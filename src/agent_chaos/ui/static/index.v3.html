@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🃏 agent-chaos · Resilience Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.v3.css?v=3.3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">🃏</span>
+            <span class="logo-text">agent-chaos</span>
+        </div>
+        <div class="header-controls">
+            <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
+            <div class="status-indicator disconnected" id="statusBadge">
+                <div class="status-dot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+    
+    <main class="main">
+        <!-- Narrative Summary Bar -->
+        <div class="summary-bar" id="summaryBar">
+            <span class="summary-narrative" id="summaryNarrative">Waiting for chaos runs...</span>
+        </div>
+
+        <!-- Scenarios Section -->
+        <section class="scenarios-section">
+            <div class="section-header">
+                <h2 class="section-title">Chaos Scenarios <span class="section-count" id="scenarioCount">0</span></h2>
+                <div class="filter-tabs" id="filterTabs">
+                    <button class="filter-tab active" data-filter="all">All</button>
+                    <button class="filter-tab" data-filter="passed">Passed</button>
+                    <button class="filter-tab" data-filter="failed">Failed</button>
+                    <button class="filter-tab" data-filter="chaos">With Chaos</button>
+                </div>
+            </div>
+            
+            <div class="scenarios-grid" id="scenariosGrid">
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">🎲</div>
+                    <h3 class="empty-title">Awaiting Chaos...</h3>
+                    <p class="empty-text">
+                        Run your agent with chaos scenarios or use 
+                        <code>chaos_context("test", emit_events=True)</code>
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Scenario Detail Modal -->
+    <div class="modal hidden" id="scenarioModal">
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+        <div class="modal-panel">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-title" id="modalTitle">Scenario Details</div>
+                    <div class="modal-subtitle" id="modalSubtitle"></div>
+                </div>
+                <button class="modal-close" id="modalClose">✕</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.v3.js?v=3.3"></script>
+</body>
+</html>

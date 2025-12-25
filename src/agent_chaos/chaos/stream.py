@@ -54,6 +54,9 @@ class StreamChaos:
 class StreamCutChaos(StreamChaos):
     """Abruptly cuts stream after N chunks."""
 
+    def __str__(self) -> str:
+        return f"stream_cut(after {self.after_chunks} chunks)"
+
     def apply(self, **kwargs: Any) -> ChaosResult:
         import anthropic
         import httpx
@@ -69,6 +72,9 @@ class StreamCutChaos(StreamChaos):
 class StreamHangChaos(StreamChaos):
     """Hangs stream after N chunks (blocks forever)."""
 
+    def __str__(self) -> str:
+        return f"stream_hang(after {self.after_chunks} chunks)"
+
     def apply(self, **kwargs: Any) -> ChaosResult:
         # The actual hanging is done in the stream wrapper
         # This just signals that we should hang
@@ -82,6 +88,9 @@ class SlowTTFTChaos(StreamChaos):
     delay: float = 0.0
     after_chunks: int = 0  # Always applies to first chunk
 
+    def __str__(self) -> str:
+        return f"slow_ttft({self.delay}s)"
+
     def apply(self, **kwargs: Any) -> ChaosResult:
         return ChaosResult(action="delay", mutated=self.delay)
 
@@ -91,6 +100,9 @@ class SlowChunksChaos(StreamChaos):
     """Adds delay between chunks."""
 
     delay: float = 0.0
+
+    def __str__(self) -> str:
+        return f"slow_chunks({self.delay}s)"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         return ChaosResult(action="delay", mutated=self.delay)

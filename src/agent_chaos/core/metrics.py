@@ -149,8 +149,14 @@ class MetricsStore:
         """Record that a fault was injected."""
         self.faults_injected.append((call_id, fault))
 
+        # Use str(fault) if the object has a custom __str__, else fall back to class name
+        fault_desc = str(fault) if hasattr(fault, "__str__") else type(fault).__name__
+        # For exceptions, use the exception class name
+        if isinstance(fault, Exception):
+            fault_desc = type(fault).__name__
+
         if self._event_bus:
-            self._event_bus.emit_fault(call_id, type(fault).__name__, provider)
+            self._event_bus.emit_fault(call_id, fault_desc, provider)
 
         if self._event_sink and self._trace_id:
             self._event_sink.emit(
@@ -159,7 +165,7 @@ class MetricsStore:
                 trace_name=self._trace_name,
                 span_id=call_id,
                 provider=provider,
-                data={"fault_type": type(fault).__name__},
+                data={"fault_type": fault_desc},
             )
 
     def record_token_usage(

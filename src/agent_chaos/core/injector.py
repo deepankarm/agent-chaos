@@ -121,13 +121,18 @@ class ChaosInjector:
 
     # --- Tool Chaos ---
 
-    def next_tool_chaos(self, tool_name: str, result: str) -> ChaosResult | None:
-        """Get the next tool chaos to apply, if any."""
+    def next_tool_chaos(
+        self, tool_name: str, result: str
+    ) -> tuple[ChaosResult, Chaos] | None:
+        """Get the next tool chaos to apply, if any. Returns (result, chaos_obj)."""
         call_number = self._call_count
 
         for chaos in self._tool_chaos:
             if chaos.should_trigger(call_number, tool_name=tool_name):
-                return chaos.apply(tool_name=tool_name, result=result, ctx=self._ctx)
+                return (
+                    chaos.apply(tool_name=tool_name, result=result, ctx=self._ctx),
+                    chaos,
+                )
 
         return None
 
@@ -139,12 +144,12 @@ class ChaosInjector:
         """Get mutation for a specific tool (legacy interface, returns None)."""
         return None
 
-    def next_context_chaos(self, messages: list) -> ChaosResult | None:
-        """Get the next context chaos to apply, if any."""
+    def next_context_chaos(self, messages: list) -> tuple[ChaosResult, Chaos] | None:
+        """Get the next context chaos to apply, if any. Returns (result, chaos_obj)."""
         call_number = self._call_count
 
         for chaos in self._context_chaos:
             if chaos.should_trigger(call_number):
-                return chaos.apply(messages=messages, ctx=self._ctx)
+                return (chaos.apply(messages=messages, ctx=self._ctx), chaos)
 
         return None

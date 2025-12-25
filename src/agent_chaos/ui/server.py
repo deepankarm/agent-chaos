@@ -39,14 +39,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/")
 async def dashboard():
-    """Serve the dashboard HTML."""
-    return FileResponse(STATIC_DIR / "index.html")
-
-
-@app.get("/v2")
-async def dashboard_v2():
-    """Serve the v2 narrative-first dashboard."""
-    return FileResponse(STATIC_DIR / "index.v2.html")
+    """Serve the v3 dashboard."""
+    return FileResponse(STATIC_DIR / "index.v3.html")
 
 
 @app.get("/api/traces")
