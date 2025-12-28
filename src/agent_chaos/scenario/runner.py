@@ -155,17 +155,6 @@ def run_scenario(
         agent_output = ctx.agent_output
         conversation = ctx.metrics.conversation.copy()
 
-        # Add user message at the start if we have agent_input
-        if agent_input:
-            conversation.insert(
-                0,
-                {
-                    "type": "user",
-                    "content": agent_input,
-                    "timestamp_ms": 0,
-                },
-            )
-
         # Add assistant message at the end if we have agent_output
         if agent_output:
             conversation.append(

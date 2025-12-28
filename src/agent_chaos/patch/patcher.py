@@ -513,12 +513,18 @@ def _apply_user_chaos_to_messages(
     Returns:
         (mutated_messages, original_user_input)
     """
-    if not injector.has_user_chaos():
-        return messages, None
-
+    # Extract user input first
     msg_idx, block_idx, original_text = _extract_last_user_text(messages)
     if original_text is None:
         return messages, None
+
+    # Always record the original user message to conversation (for UI display)
+    # Deduplication is handled automatically in add_conversation_entry
+    metrics.add_conversation_entry("user", content=original_text)
+
+    # If no chaos configured, return early
+    if not injector.has_user_chaos():
+        return messages, original_text
 
     # Apply user chaos
     mutated_text, chaos_obj = injector.apply_user_chaos(original_text)

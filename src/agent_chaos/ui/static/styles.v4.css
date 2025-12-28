@@ -408,7 +408,7 @@ body {
 .chaos-type-dropdown {
     position: absolute;
     top: calc(100% + 6px);
-    left: 0;
+    right: 0;
     min-width: 180px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-medium);
@@ -479,6 +479,17 @@ body {
     flex: 1;
     user-select: none;
 }
+
+/* Color bar on left edge matching chaos types */
+.dropdown-option {
+    border-left: 3px solid transparent;
+}
+
+.dropdown-option:has([data-type="user_input"]) { border-left-color: var(--chaos-orange); }
+.dropdown-option:has([data-type="llm"]) { border-left-color: var(--accent-secondary); }
+.dropdown-option:has([data-type="stream"]) { border-left-color: var(--info-cyan); }
+.dropdown-option:has([data-type="tool"]) { border-left-color: var(--tool-teal); }
+.dropdown-option:has([data-type="context"]) { border-left-color: var(--warning-amber); }
 
 .filter-tab {
     padding: 6px 12px;

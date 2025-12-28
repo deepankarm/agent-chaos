@@ -662,12 +662,17 @@ function renderConversationEntry(entry, index) {
             let diffHtml = '';
             // Priority 1: Context mutations with added messages
             if (entry.added_messages && Array.isArray(entry.added_messages) && entry.added_messages.length > 0) {
-                const addedHtml = entry.added_messages.map(msg => `
-                    <div class="context-message added">
-                        <span class="msg-role">[${escapeHtml(msg.role)}]</span>
-                        <span class="msg-content">${escapeHtml(truncateText(msg.content, 200))}</span>
-                    </div>
-                `).join('');
+                const addedHtml = entry.added_messages.map(msg => {
+                    const content = msg.content || '';
+                    return `
+                        <div class="context-message added">
+                            <span class="msg-role">[${escapeHtml(msg.role)}]</span>
+
+                            <span class="msg-content">${escapeHtml(content)}</span>
+                            
+                        </div>
+                    `;
+                }).join('');
                 diffHtml = `
                     <div class="chaos-diff context-diff">
                         <div class="diff-header">Injected messages:</div>
@@ -677,12 +682,15 @@ function renderConversationEntry(entry, index) {
             }
             // Priority 2: Context mutations with removed messages
             else if (entry.removed_messages && Array.isArray(entry.removed_messages) && entry.removed_messages.length > 0) {
-                const removedHtml = entry.removed_messages.map(msg => `
-                    <div class="context-message removed">
-                        <span class="msg-role">[${escapeHtml(msg.role)}]</span>
-                        <span class="msg-content">${escapeHtml(truncateText(msg.content, 200))}</span>
-                    </div>
-                `).join('');
+                const removedHtml = entry.removed_messages.map(msg => {
+                    const content = msg.content || '';
+                    return `
+                        <div class="context-message removed">
+                            <span class="msg-role">[${escapeHtml(msg.role)}]</span>
+                            <span class="msg-content">${escapeHtml(content)}</span>
+                        </div>
+                    `;
+                }).join('');
                 diffHtml = `
                     <div class="chaos-diff context-diff">
                         <div class="diff-header">Removed messages:</div>
@@ -694,8 +702,8 @@ function renderConversationEntry(entry, index) {
             else if (entry.original && entry.mutated) {
                 diffHtml = `
                     <div class="chaos-diff">
-                        <span class="diff-line removed">${escapeHtml(truncateText(entry.original, 100))}</span>
-                        <span class="diff-line added">${escapeHtml(truncateText(entry.mutated, 100))}</span>
+                        <span class="diff-line removed">${escapeHtml(entry.original)}</span>
+                        <span class="diff-line added">${escapeHtml(entry.mutated)}</span>
                     </div>
                 `;
             }
@@ -703,6 +711,7 @@ function renderConversationEntry(entry, index) {
             else if (entry.original) {
                 diffHtml = `<div class="chaos-summary">${escapeHtml(entry.original)}</div>`;
             }
+            
             return `
                 <div class="timeline-row chaos">
                     <div class="time-gutter">

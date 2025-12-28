@@ -40,6 +40,7 @@ class MetricsStore:
     # Conversation tracking for UI
     conversation: list[dict[str, Any]] = field(default_factory=list)
     _start_time: float = field(default_factory=time.monotonic)
+    _user_message_recorded: bool = False
 
     def set_event_bus(self, event_bus: EventBus):
         """Set the event bus for real-time UI updates."""
@@ -64,12 +65,20 @@ class MetricsStore:
         **kwargs: Any,
     ) -> None:
         """Add an entry to the conversation timeline."""
+        # Deduplicate user messages to avoid recording the same message multiple times
+        if entry_type == "user" and self._user_message_recorded:
+            return
+
         entry: dict[str, Any] = {
             "type": entry_type,
             "timestamp_ms": self._elapsed_ms(),
         }
         entry.update(kwargs)
         self.conversation.append(entry)
+
+        # Mark user message as recorded after adding it
+        if entry_type == "user":
+            self._user_message_recorded = True
 
     def start_call(self, provider: str) -> str:
         """Start tracking a call. Returns call_id."""
