@@ -1,8 +1,3 @@
-"""CLI entrypoint for agent-chaos.
-
-Keep CLI code out of `agent_chaos/__init__.py` so importing the library stays clean.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -64,33 +59,35 @@ def main() -> None:
         parser.print_help()
         return
 
-    from agent_chaos.scenario.loader import load_scenarios_from_dir, load_target
+    from agent_chaos.scenario.loader import load_scenarios
     from agent_chaos.scenario.runner import run_scenario
 
-    scenarios = []
-    for t in args.targets:
-        p = Path(t)
-        if p.exists() and p.is_dir():
-            scenarios.extend(
-                load_scenarios_from_dir(p, glob=args.glob, recursive=args.recursive)
-            )
-        else:
-            scenarios.extend(load_target(t))
+    scenarios = load_scenarios(args.targets, glob=args.glob, recursive=args.recursive)
+    print(f"\n🃏 Running {len(scenarios)} scenario(s)...\n")
 
     passed = 0
     failed = 0
 
-    for scenario in scenarios:
+    for i, scenario in enumerate(scenarios, 1):
+        print(f"[{i}/{len(scenarios)}] {scenario.name}...", end=" ", flush=True)
         report = run_scenario(
             scenario,
             artifacts_dir=Path(args.artifacts_dir),
             seed=args.seed,
             record_events=not args.no_events,
         )
+
         if report.passed:
             passed += 1
+            print(f"✓ PASS ({report.elapsed_s:.2f}s)")
         else:
             failed += 1
+            print(f"✗ FAIL ({report.elapsed_s:.2f}s)")
+            if report.error:
+                print(f"    Error: {report.error}")
+            for ar in report.assertion_results:
+                if not ar.passed:
+                    print(f"    • {ar.name}: {ar.message}")
             if args.fail_fast:
                 break
 

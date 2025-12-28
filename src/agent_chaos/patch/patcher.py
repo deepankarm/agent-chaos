@@ -112,7 +112,10 @@ class ChaosPatcher:
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
                         metrics.record_fault(
-                            call_id, chaos_result.exception, provider="anthropic"
+                            call_id,
+                            chaos_result.exception,
+                            provider="anthropic",
+                            chaos_point="LLM",
                         )
                         metrics.end_call(
                             call_id, success=False, error=chaos_result.exception
@@ -168,7 +171,10 @@ class ChaosPatcher:
             if chaos_result := injector.next_llm_chaos("anthropic"):
                 if chaos_result.exception:
                     metrics.record_fault(
-                        call_id, chaos_result.exception, provider="anthropic"
+                        call_id,
+                        chaos_result.exception,
+                        provider="anthropic",
+                        chaos_point="LLM",
                     )
                     metrics.end_call(
                         call_id, success=False, error=chaos_result.exception
@@ -212,7 +218,10 @@ class ChaosPatcher:
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
                         metrics.record_fault(
-                            call_id, chaos_result.exception, provider="anthropic"
+                            call_id,
+                            chaos_result.exception,
+                            provider="anthropic",
+                            chaos_point="LLM",
                         )
                         metrics.end_call(
                             call_id, success=False, error=chaos_result.exception
@@ -291,11 +300,15 @@ def _maybe_record_anthropic_response_metadata(
                     block.get("input") if isinstance(block, dict) else None
                 )
                 input_bytes = None
+                tool_args = None
                 try:
                     if tool_input is not None:
                         input_bytes = len(
                             json.dumps(tool_input, ensure_ascii=False).encode("utf-8")
                         )
+                        # Capture args for conversation view
+                        if isinstance(tool_input, dict):
+                            tool_args = tool_input
                 except Exception:
                     input_bytes = None
                 if tool_name:
@@ -304,6 +317,7 @@ def _maybe_record_anthropic_response_metadata(
                         tool_name=str(tool_name),
                         tool_use_id=str(tool_use_id) if tool_use_id else None,
                         input_bytes=input_bytes,
+                        tool_args=tool_args,
                         provider="anthropic",
                     )
                     # Non-intrusive inference: treat tool_use completion as tool_start.
@@ -325,6 +339,40 @@ def _maybe_record_anthropic_tool_results_in_request(
     """Infer tool_end when we see tool_result blocks in a subsequent LLM request."""
     try:
         messages = mutated_kwargs.get("messages", []) or []
+
+        # First pass: extract tool_use_id -> tool_name mapping from assistant messages
+        # This ensures tool names are available even in streaming scenarios
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tool_id = block.get("id", "")
+                            tool_name = block.get("name", "unknown")
+                            tool_input = block.get("input")
+                            if tool_id and tool_name:
+                                # Populate the mapping for later lookup
+                                if tool_id not in metrics._tool_use_to_tool_name:
+                                    metrics._tool_use_to_tool_name[tool_id] = tool_name
+                                    metrics._tool_use_to_call_id[tool_id] = (
+                                        current_call_id
+                                    )
+                                # Also add to conversation if not already there
+                                if tool_id not in metrics._tool_use_in_conversation:
+                                    metrics._tool_use_in_conversation.add(tool_id)
+                                    metrics.add_conversation_entry(
+                                        "tool_call",
+                                        tool_name=tool_name,
+                                        tool_use_id=tool_id,
+                                        args=(
+                                            tool_input
+                                            if isinstance(tool_input, dict)
+                                            else None
+                                        ),
+                                    )
+
+        # Second pass: process tool_result blocks
         for msg in messages:
             if not (isinstance(msg, dict) and msg.get("role") == "user"):
                 continue
@@ -339,11 +387,29 @@ def _maybe_record_anthropic_tool_results_in_request(
                     continue
                 is_error = bool(block.get("is_error")) if "is_error" in block else None
                 out_bytes = None
+                result_content = None
                 try:
-                    out_bytes = len(
-                        json.dumps(block.get("content", ""), ensure_ascii=False).encode(
-                            "utf-8"
+                    raw_content = block.get("content", "")
+                    # Capture result content for conversation view
+                    if isinstance(raw_content, str):
+                        result_content = raw_content
+                    elif isinstance(raw_content, list):
+                        # Handle list of content blocks (extract text)
+                        texts = []
+                        for item in raw_content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                texts.append(item.get("text", ""))
+                            elif isinstance(item, str):
+                                texts.append(item)
+                        result_content = (
+                            " ".join(texts) if texts else json.dumps(raw_content)
                         )
+                    else:
+                        result_content = (
+                            json.dumps(raw_content) if raw_content else None
+                        )
+                    out_bytes = len(
+                        json.dumps(raw_content, ensure_ascii=False).encode("utf-8")
                     )
                 except Exception:
                     out_bytes = None
@@ -351,6 +417,7 @@ def _maybe_record_anthropic_tool_results_in_request(
                     tool_use_id=str(tool_use_id),
                     is_error=is_error,
                     output_bytes=out_bytes,
+                    result=result_content,
                     resolved_in_call_id=current_call_id,
                     provider="anthropic",
                 )
@@ -369,10 +436,29 @@ def _maybe_mutate_context(
     if result := injector.next_context_chaos(messages):
         chaos_result, chaos_obj = result
         if chaos_result.mutated is not None:
+            # Extract function metadata for UI
+            chaos_fn_name = None
+            chaos_fn_doc = None
+            if hasattr(chaos_obj, "mutator") and chaos_obj.mutator:
+                chaos_fn_name = getattr(chaos_obj.mutator, "__name__", None)
+                doc = getattr(chaos_obj.mutator, "__doc__", None)
+                if doc:
+                    # Get first line of docstring
+                    chaos_fn_doc = doc.strip().split("\n")[0]
+
+            # Compute mutation summary
+            original_count = len(messages)
+            mutated_count = len(chaos_result.mutated)
+            mutation_summary = f"{original_count} → {mutated_count} messages"
+
             metrics.record_fault(
                 "context_mutation",
                 chaos_obj,
                 provider="anthropic",
+                chaos_point="CONTEXT",
+                chaos_fn_name=chaos_fn_name,
+                chaos_fn_doc=chaos_fn_doc,
+                original=mutation_summary,
             )
             return {**kwargs, "messages": chaos_result.mutated}
 
@@ -399,7 +485,12 @@ def _execute_with_chaos_sync(
 
     if chaos_result := injector.next_llm_chaos("anthropic"):
         if chaos_result.exception:
-            metrics.record_fault(call_id, chaos_result.exception, provider="anthropic")
+            metrics.record_fault(
+                call_id,
+                chaos_result.exception,
+                provider="anthropic",
+                chaos_point="LLM",
+            )
             metrics.end_call(call_id, success=False, error=chaos_result.exception)
             raise chaos_result.exception
 
@@ -435,7 +526,12 @@ async def _execute_with_chaos_async(
 
     if chaos_result := injector.next_llm_chaos("anthropic"):
         if chaos_result.exception:
-            metrics.record_fault(call_id, chaos_result.exception, provider="anthropic")
+            metrics.record_fault(
+                call_id,
+                chaos_result.exception,
+                provider="anthropic",
+                chaos_point="LLM",
+            )
             metrics.end_call(call_id, success=False, error=chaos_result.exception)
             raise chaos_result.exception
 
@@ -493,10 +589,27 @@ def _mutate_anthropic_tool_results(
                             chaos_result, chaos_obj = result
                             if chaos_result.mutated is not None:
                                 block = {**block, "content": chaos_result.mutated}
+                                # Extract function metadata for UI
+                                chaos_fn_name = None
+                                chaos_fn_doc = None
+                                if hasattr(chaos_obj, "mutator") and chaos_obj.mutator:
+                                    chaos_fn_name = getattr(
+                                        chaos_obj.mutator, "__name__", None
+                                    )
+                                    doc = getattr(chaos_obj.mutator, "__doc__", None)
+                                    if doc:
+                                        # Get first line of docstring
+                                        chaos_fn_doc = doc.strip().split("\n")[0]
                                 metrics.record_fault(
                                     "tool_mutation",
                                     chaos_obj,
                                     provider="anthropic",
+                                    chaos_point="TOOL",
+                                    chaos_fn_name=chaos_fn_name,
+                                    chaos_fn_doc=chaos_fn_doc,
+                                    target_tool=tool_name,
+                                    original=original_result,
+                                    mutated=chaos_result.mutated,
                                 )
                     mutated_content.append(block)
                 msg = {**msg, "content": mutated_content}

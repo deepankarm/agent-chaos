@@ -152,6 +152,29 @@ def run_scenario(
         # Store ctx values before exiting the with block
         agent_input = ctx.agent_input
         agent_output = ctx.agent_output
+        conversation = ctx.metrics.conversation.copy()
+
+        # Add user message at the start if we have agent_input
+        if agent_input:
+            conversation.insert(
+                0,
+                {
+                    "type": "user",
+                    "content": agent_input,
+                    "timestamp_ms": 0,
+                },
+            )
+
+        # Add assistant message at the end if we have agent_output
+        if agent_output:
+            conversation.append(
+                {
+                    "type": "assistant",
+                    "content": agent_output,
+                    "timestamp_ms": ctx.elapsed_s * 1000 if ctx.elapsed_s else 0,
+                }
+            )
+
     except Exception as e:
         # Only errors outside the chaos_context setup/teardown land here.
         elapsed_s = time.monotonic() - start
@@ -159,6 +182,7 @@ def run_scenario(
         passed = False
         agent_input = None
         agent_output = None
+        conversation = []
         scorecard = {
             "trace_id": trace_id,
             "scenario": scenario.name,
@@ -178,6 +202,7 @@ def run_scenario(
         meta=scenario.meta,
         agent_input=agent_input,
         agent_output=agent_output,
+        conversation=conversation,
     )
 
     if run_dir is not None:

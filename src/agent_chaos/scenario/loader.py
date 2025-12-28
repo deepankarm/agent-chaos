@@ -19,11 +19,11 @@ from agent_chaos.scenario.model import Scenario
 
 
 def _load_module_from_file(path: Path) -> ModuleType:
-    """Load a scenario module from a file path via importlib.
+    """Load a scenario module from a file path via importlib."""
+    cwd = str(Path.cwd().resolve())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
 
-    Important: we register the module in `sys.modules` *before* executing it.
-    Some decorators (notably `dataclasses.dataclass`) require this invariant.
-    """
     # Use a unique name to avoid collisions when loading files with the same stem.
     suffix = f"{abs(hash(str(path))) & 0xFFFFFFFF:x}"
     module_name = f"agent_chaos_scenario_{path.stem}_{suffix}"
@@ -163,4 +163,17 @@ def load_scenarios_from_dir(
             f"No scenarios found in {base} (glob={glob}, recursive={recursive})"
         )
 
+    return scenarios
+
+
+def load_scenarios(
+    targets: list[str], glob: str = "*.py", recursive: bool = False
+) -> list[Scenario]:
+    scenarios: list[Scenario] = []
+    for t in targets:
+        p = Path(t)
+        if p.exists() and p.is_dir():
+            scenarios.extend(load_scenarios_from_dir(p, glob=glob, recursive=recursive))
+        else:
+            scenarios.extend(load_target(t))
     return scenarios

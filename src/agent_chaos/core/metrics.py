@@ -34,10 +34,14 @@ class MetricsStore:
     _tool_use_to_tool_name: dict[str, str] = field(default_factory=dict)
     _tool_use_started_at: dict[str, float] = field(default_factory=dict)
     _tool_use_ended: set[str] = field(default_factory=set)
+    _tool_use_in_conversation: set[str] = field(default_factory=set)
     _event_bus: EventBus | None = field(default=None, repr=False)
     _event_sink: JsonlEventSink | None = field(default=None, repr=False)
     _trace_id: str = ""
     _trace_name: str = ""
+    # Conversation tracking for UI
+    conversation: list[dict[str, Any]] = field(default_factory=list)
+    _start_time: float = field(default_factory=time.monotonic)
 
     def set_event_bus(self, event_bus: EventBus):
         """Set the event bus for real-time UI updates."""
@@ -51,6 +55,23 @@ class MetricsStore:
         """Set the active trace context for event sinks."""
         self._trace_id = trace_id
         self._trace_name = trace_name
+
+    def _elapsed_ms(self) -> float:
+        """Get elapsed time since start in milliseconds."""
+        return (time.monotonic() - self._start_time) * 1000
+
+    def add_conversation_entry(
+        self,
+        entry_type: str,
+        **kwargs: Any,
+    ) -> None:
+        """Add an entry to the conversation timeline."""
+        entry: dict[str, Any] = {
+            "type": entry_type,
+            "timestamp_ms": self._elapsed_ms(),
+        }
+        entry.update(kwargs)
+        self.conversation.append(entry)
 
     def start_call(self, provider: str) -> str:
         """Start tracking a call. Returns call_id."""
@@ -145,8 +166,29 @@ class MetricsStore:
                 },
             )
 
-    def record_fault(self, call_id: str, fault: Any, provider: str = ""):
-        """Record that a fault was injected."""
+    def record_fault(
+        self,
+        call_id: str,
+        fault: Any,
+        provider: str = "",
+        *,
+        chaos_point: str | None = None,
+        chaos_fn_name: str | None = None,
+        chaos_fn_doc: str | None = None,
+        target_tool: str | None = None,
+        original: str | None = None,
+        mutated: str | None = None,
+    ):
+        """Record that a fault was injected.
+
+        Args:
+            chaos_point: The injection point (LLM, STREAM, TOOL, CONTEXT)
+            chaos_fn_name: For custom mutations, the function name
+            chaos_fn_doc: For custom mutations, the function docstring
+            target_tool: For tool chaos, the affected tool name
+            original: Original value before mutation
+            mutated: Value after mutation
+        """
         self.faults_injected.append((call_id, fault))
 
         # Use str(fault) if the object has a custom __str__, else fall back to class name
@@ -159,14 +201,44 @@ class MetricsStore:
             self._event_bus.emit_fault(call_id, fault_desc, provider)
 
         if self._event_sink and self._trace_id:
+            data: dict[str, Any] = {"fault_type": fault_desc}
+            if chaos_point is not None:
+                data["chaos_point"] = chaos_point
+            if chaos_fn_name is not None:
+                data["chaos_fn_name"] = chaos_fn_name
+            if chaos_fn_doc is not None:
+                data["chaos_fn_doc"] = chaos_fn_doc
+            if target_tool is not None:
+                data["target_tool"] = target_tool
+            if original is not None:
+                data["original"] = original
+            if mutated is not None:
+                data["mutated"] = mutated
+
             self._event_sink.emit(
                 type="fault_injected",
                 trace_id=self._trace_id,
                 trace_name=self._trace_name,
                 span_id=call_id,
                 provider=provider,
-                data={"fault_type": fault_desc},
+                data=data,
             )
+
+        # Add to conversation timeline
+        chaos_entry: dict[str, Any] = {"fault_type": fault_desc}
+        if chaos_point:
+            chaos_entry["chaos_point"] = chaos_point
+        if chaos_fn_name:
+            chaos_entry["chaos_fn_name"] = chaos_fn_name
+        if chaos_fn_doc:
+            chaos_entry["chaos_fn_doc"] = chaos_fn_doc
+        if target_tool:
+            chaos_entry["target_tool"] = target_tool
+        if original:
+            chaos_entry["original"] = original
+        if mutated:
+            chaos_entry["mutated"] = mutated
+        self.add_conversation_entry("chaos", **chaos_entry)
 
     def record_token_usage(
         self,
@@ -221,6 +293,7 @@ class MetricsStore:
         tool_name: str,
         tool_use_id: str | None = None,
         input_bytes: int | None = None,
+        tool_args: dict[str, Any] | None = None,
         provider: str = "",
     ):
         """Record that the LLM requested a tool (tool_use block)."""
@@ -231,6 +304,8 @@ class MetricsStore:
             self._tool_use_to_tool_name[tool_use_id] = tool_name
         if input_bytes is not None:
             data["input_bytes"] = input_bytes
+        if tool_args is not None:
+            data["args"] = tool_args
 
         if call_id in self._active_calls:
             self._active_calls[call_id].setdefault("tool_uses", []).append(data)
@@ -251,6 +326,16 @@ class MetricsStore:
                 span_id=call_id,
                 provider=provider,
                 data=data,
+            )
+
+        # Add to conversation timeline (avoid duplicates)
+        if tool_use_id and tool_use_id not in self._tool_use_in_conversation:
+            self._tool_use_in_conversation.add(tool_use_id)
+            self.add_conversation_entry(
+                "tool_call",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                args=tool_args,
             )
 
     def record_tool_start(
@@ -313,6 +398,7 @@ class MetricsStore:
         call_id: str | None = None,
         duration_ms: float | None = None,
         output_bytes: int | None = None,
+        result: str | None = None,
         error: str | None = None,
         resolved_in_call_id: str | None = None,
         provider: str = "",
@@ -329,6 +415,8 @@ class MetricsStore:
             data["duration_ms"] = duration_ms
         if output_bytes is not None:
             data["output_bytes"] = output_bytes
+        if result is not None:
+            data["result"] = result
         if error:
             data["error"] = error
         if resolved_in_call_id:
@@ -356,12 +444,24 @@ class MetricsStore:
                 data=data,
             )
 
+        # Add to conversation timeline
+        self.add_conversation_entry(
+            "tool_result",
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+            result=result,
+            success=success,
+            duration_ms=duration_ms,
+            error=error,
+        )
+
     def record_tool_result_seen(
         self,
         *,
         tool_use_id: str,
         is_error: bool | None = None,
         output_bytes: int | None = None,
+        result: str | None = None,
         resolved_in_call_id: str | None = None,
         provider: str = "",
     ):
@@ -383,6 +483,7 @@ class MetricsStore:
             tool_use_id=tool_use_id,
             duration_ms=duration_ms,
             output_bytes=output_bytes,
+            result=result,
             error="tool_result.is_error=true" if is_error else None,
             resolved_in_call_id=resolved_in_call_id,
             provider=provider,
@@ -413,7 +514,7 @@ class MetricsStore:
         successful = sum(1 for call in self.call_history if call["success"])
         return successful / len(self.call_history)
 
-    def record_ttft(self, ttft: float, call_id: str = ""):
+    def record_ttft(self, ttft: float, call_id: str = "", *, is_delayed: bool = False):
         """Record time-to-first-token."""
         self._ttft_times.append(ttft)
 
@@ -427,12 +528,63 @@ class MetricsStore:
                 trace_name=self._trace_name,
                 span_id=call_id,
                 provider="",
-                data={"ttft_ms": ttft * 1000},
+                data={"ttft_ms": ttft * 1000, "is_delayed": is_delayed},
             )
 
-    def record_hang(self, chunk_count: int):
+        # Add chaos entry if this was a delayed TTFT
+        if is_delayed:
+            if self._event_sink and self._trace_id:
+                self._event_sink.emit(
+                    type="fault_injected",
+                    trace_id=self._trace_id,
+                    trace_name=self._trace_name,
+                    span_id=call_id,
+                    provider="",
+                    data={
+                        "fault_type": "slow_ttft",
+                        "chaos_point": "STREAM",
+                        "ttft_ms": ttft * 1000,
+                    },
+                )
+
+            # Track as injected fault
+            self.faults_injected.append((call_id, "slow_ttft"))
+
+            self.add_conversation_entry(
+                "chaos",
+                fault_type="slow_ttft",
+                chaos_point="STREAM",
+                chaos_fn_doc=f"First token delayed by {ttft*1000:.0f}ms",
+            )
+
+    def record_hang(self, chunk_count: int, call_id: str = ""):
         """Record stream hang event."""
         self._hang_events.append(chunk_count)
+
+        if self._event_sink and self._trace_id:
+            self._event_sink.emit(
+                type="fault_injected",
+                trace_id=self._trace_id,
+                trace_name=self._trace_name,
+                span_id=call_id,
+                provider="",
+                data={
+                    "fault_type": "stream_hang",
+                    "chaos_point": "STREAM",
+                    "chunk_count": chunk_count,
+                },
+            )
+
+        # Track as injected fault
+        self.faults_injected.append((call_id, "stream_hang"))
+
+        # Add chaos entry for stream hang
+        self.add_conversation_entry(
+            "chaos",
+            fault_type="stream_hang",
+            chaos_point="STREAM",
+            chaos_fn_doc=f"Stream hung after {chunk_count} chunks",
+        )
 
     def record_stream_cut(self, chunk_count: int, call_id: str = ""):
         """Record stream cut event."""
@@ -450,6 +602,30 @@ class MetricsStore:
                 provider="",
                 data={"chunk_count": chunk_count},
             )
+            # Also emit as fault_injected so it shows in chaos section
+            self._event_sink.emit(
+                type="fault_injected",
+                trace_id=self._trace_id,
+                trace_name=self._trace_name,
+                span_id=call_id,
+                provider="",
+                data={
+                    "fault_type": "stream_cut",
+                    "chaos_point": "STREAM",
+                    "chunk_count": chunk_count,
+                },
+            )
+
+        # Track as injected fault
+        self.faults_injected.append((call_id, "stream_cut"))
+
+        # Add chaos entry for stream cut
+        self.add_conversation_entry(
+            "chaos",
+            fault_type="stream_cut",
+            chaos_point="STREAM",
+            chaos_fn_doc=f"Stream terminated after {chunk_count} chunks",
+        )
 
     def record_stream_stats(
         self, call_id: str, *, chunk_count: int, provider: str = ""
@@ -470,6 +646,33 @@ class MetricsStore:
                 provider=provider,
                 data={"chunk_count": chunk_count},
             )
+
+    def record_slow_chunks(self, delay_ms: float, call_id: str = ""):
+        """Record slow chunks chaos event."""
+        if self._event_sink and self._trace_id:
+            self._event_sink.emit(
+                type="fault_injected",
+                trace_id=self._trace_id,
+                trace_name=self._trace_name,
+                span_id=call_id,
+                provider="",
+                data={
+                    "fault_type": "slow_chunks",
+                    "chaos_point": "STREAM",
+                    "delay_ms": delay_ms,
+                },
+            )
+
+        # Track as injected fault
+        self.faults_injected.append((call_id, "slow_chunks"))
+
+        # Add chaos entry for slow chunks
+        self.add_conversation_entry(
+            "chaos",
+            fault_type="slow_chunks",
+            chaos_point="STREAM",
+            chaos_fn_doc=f"Each chunk delayed by {delay_ms:.0f}ms",
+        )
 
     def record_corruption(self, chunk_count: int):
         """Record corruption event."""

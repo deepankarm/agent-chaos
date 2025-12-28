@@ -31,46 +31,53 @@ class BaseStreamFaultMixin(ABC):
     def _init_fault_state(self):
         """Initialize fault tracking state."""
         self._chunk_count = 0
+        self._slow_chunks_recorded = False
 
     def _check_ttft_delay_sync(self):
         """Check and apply TTFT delay (sync)."""
         if self._chunk_count == 1:
+            # Check if delay will be applied (for chaos tracking)
+            delay = self._injector.ttft_delay()
+
             # Get call start time from metrics
             call_info = self._metrics._active_calls.get(self._call_id)
             if call_info:
                 call_start_time = call_info["start_time"]
                 ttft = time.monotonic() - call_start_time
-                self._metrics.record_ttft(ttft, self._call_id)
+                self._metrics.record_ttft(ttft, self._call_id, is_delayed=bool(delay))
 
             # Apply delay fault if configured
-            if delay := self._injector.ttft_delay():
+            if delay:
                 time.sleep(delay)
 
     async def _check_ttft_delay_async(self):
         """Check and apply TTFT delay (async)."""
         if self._chunk_count == 1:
+            # Check if delay will be applied (for chaos tracking)
+            delay = self._injector.ttft_delay()
+
             # Get call start time from metrics
             call_info = self._metrics._active_calls.get(self._call_id)
             if call_info:
                 call_start_time = call_info["start_time"]
                 ttft = time.monotonic() - call_start_time
-                self._metrics.record_ttft(ttft, self._call_id)
+                self._metrics.record_ttft(ttft, self._call_id, is_delayed=bool(delay))
 
             # Apply delay fault if configured
-            if delay := self._injector.ttft_delay():
+            if delay:
                 await asyncio.sleep(delay)
 
     def _check_stream_hang_sync(self):
         """Check and apply stream hang (sync)."""
         if self._injector.should_hang(self._chunk_count):
-            self._metrics.record_hang(self._chunk_count)
+            self._metrics.record_hang(self._chunk_count, self._call_id)
             while True:
                 time.sleep(1)
 
     async def _check_stream_hang_async(self):
         """Check and apply stream hang (async)."""
         if self._injector.should_hang(self._chunk_count):
-            self._metrics.record_hang(self._chunk_count)
+            self._metrics.record_hang(self._chunk_count, self._call_id)
             while True:
                 await asyncio.sleep(1)
 
@@ -83,11 +90,19 @@ class BaseStreamFaultMixin(ABC):
     def _check_slow_chunks_sync(self):
         """Check and apply slow chunk delay (sync)."""
         if delay := self._injector.chunk_delay():
+            # Record chaos event once
+            if not self._slow_chunks_recorded:
+                self._slow_chunks_recorded = True
+                self._metrics.record_slow_chunks(delay * 1000, self._call_id)
             time.sleep(delay)
 
     async def _check_slow_chunks_async(self):
         """Check and apply slow chunk delay (async)."""
         if delay := self._injector.chunk_delay():
+            # Record chaos event once
+            if not self._slow_chunks_recorded:
+                self._slow_chunks_recorded = True
+                self._metrics.record_slow_chunks(delay * 1000, self._call_id)
             await asyncio.sleep(delay)
 
     def _check_corruption(self, event):

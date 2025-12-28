@@ -21,6 +21,7 @@ class RunReport:
     meta: dict[str, Any] = field(default_factory=dict)
     agent_input: str | None = None
     agent_output: str | None = None
+    conversation: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
