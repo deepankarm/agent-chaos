@@ -74,7 +74,8 @@ class Trace:
 
     trace_id: str
     name: str
-    start_time: str
+    description: str = ""
+    start_time: str = ""
     end_time: str | None = None
     spans: list[Span] = field(default_factory=list)
 
@@ -110,7 +111,7 @@ class EventBus:
         self._active_trace_id: str = ""
         self._active_spans: dict[str, Span] = {}
 
-    def start_session(self, name: str) -> str:
+    def start_session(self, name: str, description: str = "") -> str:
         """Start a new trace (chaos session)."""
         trace_id = str(uuid.uuid4())[:8]
         self._active_trace_id = trace_id
@@ -118,6 +119,7 @@ class EventBus:
         trace = Trace(
             trace_id=trace_id,
             name=name,
+            description=description,
             start_time=datetime.now().isoformat(),
         )
         self._traces[trace_id] = trace

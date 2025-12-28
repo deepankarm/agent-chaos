@@ -11,7 +11,7 @@ from agent_chaos.scenario.assertions import (
     ExpectError,
     MaxFailedCalls,
     MaxLLMCalls,
-    MinFaultsInjected,
+    MinChaosInjected,
     MinLLMCalls,
 )
 from agent_chaos.scenario.model import Scenario
@@ -26,6 +26,6 @@ __all__ = [
     "MaxLLMCalls",
     "MaxFailedCalls",
     "MinLLMCalls",
-    "MinFaultsInjected",
+    "MinChaosInjected",
     "ExpectError",
 ]

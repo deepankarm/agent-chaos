@@ -5,6 +5,7 @@ All chaos goes in one list. System routes automatically.
 Usage:
     from agent_chaos import (
         chaos_context,
+        user_input_mutate,
         llm_rate_limit, llm_timeout, llm_stream_cut,
         tool_error, tool_mutate,
         context_mutate,
@@ -13,6 +14,7 @@ Usage:
     with chaos_context(
         name="test",
         chaos=[
+            user_input_mutate(inject_typos),
             llm_rate_limit().after_calls(2),
             llm_stream_cut(after_chunks=10),
             tool_error("down").for_tool("weather"),
@@ -23,6 +25,7 @@ Usage:
 
 from agent_chaos.chaos.base import Chaos, ChaosPoint, ChaosResult
 from agent_chaos.chaos.builder import ChaosBuilder
+from agent_chaos.chaos.context import ContextChaos, context_mutate
 from agent_chaos.chaos.llm import (
     LLMChaos,
     llm_auth_error,
@@ -45,10 +48,7 @@ from agent_chaos.chaos.tool import (
     tool_mutate,
     tool_timeout,
 )
-from agent_chaos.chaos.context import (
-    ContextChaos,
-    context_mutate,
-)
+from agent_chaos.chaos.user import UserInputChaos, user_input_mutate
 
 __all__ = [
     # Base
@@ -56,6 +56,9 @@ __all__ = [
     "ChaosPoint",
     "ChaosResult",
     "ChaosBuilder",
+    # User input chaos
+    "UserInputChaos",
+    "user_input_mutate",
     # LLM chaos
     "LLMChaos",
     "llm_rate_limit",

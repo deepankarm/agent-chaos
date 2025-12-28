@@ -3,7 +3,7 @@
 Supported refs:
 - `path/to/file.py` (expects `scenario` variable or `get_scenario()` function)
 - `package.module:attr` (attr is Scenario or callable returning Scenario)
-- directory path: loads all `*.py` files as scenario modules
+- directory path: loads the package and calls get_scenarios() or scenarios
 """
 
 from __future__ import annotations
@@ -128,6 +128,40 @@ def load_scenario(ref: str) -> Scenario:
     )
 
 
+def _load_package(dir_path: Path) -> ModuleType | None:
+    """Try to load a directory as a Python package.
+
+    Returns the module if it has __init__.py with get_scenarios/scenarios,
+    otherwise returns None.
+    """
+    init_file = dir_path / "__init__.py"
+    if not init_file.exists():
+        return None
+
+    # Add parent to sys.path so we can import the package
+    parent = str(dir_path.parent.resolve())
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+
+    # Also add cwd for relative imports within the package
+    cwd = str(Path.cwd().resolve())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+    package_name = dir_path.name
+
+    try:
+        # Try to import as a package
+        module = importlib.import_module(package_name)
+
+        # Check if it has scenario-related exports
+        if hasattr(module, "get_scenarios") or hasattr(module, "scenarios"):
+            return module
+        return None
+    except ImportError:
+        return None
+
+
 def load_scenarios_from_dir(
     dir_path: str | Path,
     *,
@@ -136,16 +170,28 @@ def load_scenarios_from_dir(
 ) -> list[Scenario]:
     """Discover and load multiple scenarios from a directory.
 
-    Each matching python file must define:
+    If the directory is a Python package (has __init__.py with get_scenarios),
+    it imports the package and calls get_scenarios().
+
+    Otherwise, each matching python file must define:
     - `scenario: Scenario`, or
     - `def get_scenario() -> Scenario`
     """
-    base = Path(dir_path)
+    base = Path(dir_path).resolve()
     if not base.exists():
         raise FileNotFoundError(str(dir_path))
     if not base.is_dir():
         raise NotADirectoryError(str(dir_path))
 
+    # First, try to load as a package
+    package_module = _load_package(base)
+    if package_module is not None:
+        if hasattr(package_module, "get_scenarios"):
+            return _coerce_scenarios(getattr(package_module, "get_scenarios"))
+        if hasattr(package_module, "scenarios"):
+            return _coerce_scenarios(getattr(package_module, "scenarios"))
+
+    # Fall back to loading individual files
     pattern = f"**/{glob}" if recursive else glob
     scenarios: list[Scenario] = []
 

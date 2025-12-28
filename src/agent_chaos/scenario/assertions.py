@@ -115,22 +115,22 @@ class MinLLMCalls:
 
 
 @dataclass
-class MinFaultsInjected:
-    """Injected faults must be >= `min_faults`."""
+class MinChaosInjected:
+    """Injected chaos must be >= `min_chaos`."""
 
-    min_faults: int
-    name: str = "min_faults_injected"
+    min_chaos: int
+    name: str = "min_chaos_injected"
 
     def __call__(self, ctx: ChaosContext) -> AssertionResult:
-        faults = ctx.metrics.faults_injected
-        count = len(faults)
-        passed = count >= self.min_faults
+        chaos_injected = ctx.metrics.faults_injected
+        count = len(chaos_injected)
+        passed = count >= self.min_chaos
         return AssertionResult(
             name=self.name,
             passed=passed,
-            message=f"faults_injected={count} (min {self.min_faults})",
+            message=f"chaos_injected={count} (min {self.min_chaos})",
             measured=count,
-            expected=self.min_faults,
+            expected=self.min_chaos,
         )
 
 

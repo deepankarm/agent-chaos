@@ -1,5 +1,3 @@
-"""Metrics collection for chaos sessions."""
-
 from __future__ import annotations
 
 import time
@@ -8,8 +6,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent_chaos.ui.events import EventBus
     from agent_chaos.event.jsonl import JsonlEventSink
+    from agent_chaos.ui.events import EventBus
 
 
 @dataclass
@@ -178,6 +176,10 @@ class MetricsStore:
         target_tool: str | None = None,
         original: str | None = None,
         mutated: str | None = None,
+        added_messages: list[dict] | None = None,
+        removed_messages: list[dict] | None = None,
+        added_count: int | None = None,
+        removed_count: int | None = None,
     ):
         """Record that a fault was injected.
 
@@ -188,6 +190,10 @@ class MetricsStore:
             target_tool: For tool chaos, the affected tool name
             original: Original value before mutation
             mutated: Value after mutation
+            added_messages: For context mutations, list of added messages
+            removed_messages: For context mutations, list of removed messages
+            added_count: Number of messages added
+            removed_count: Number of messages removed
         """
         self.faults_injected.append((call_id, fault))
 
@@ -214,6 +220,15 @@ class MetricsStore:
                 data["original"] = original
             if mutated is not None:
                 data["mutated"] = mutated
+            # Context mutation details
+            if added_messages is not None:
+                data["added_messages"] = added_messages
+            if removed_messages is not None:
+                data["removed_messages"] = removed_messages
+            if added_count is not None:
+                data["added_count"] = added_count
+            if removed_count is not None:
+                data["removed_count"] = removed_count
 
             self._event_sink.emit(
                 type="fault_injected",
@@ -238,6 +253,14 @@ class MetricsStore:
             chaos_entry["original"] = original
         if mutated:
             chaos_entry["mutated"] = mutated
+        if added_messages:
+            chaos_entry["added_messages"] = added_messages
+        if removed_messages:
+            chaos_entry["removed_messages"] = removed_messages
+        if added_count:
+            chaos_entry["added_count"] = added_count
+        if removed_count:
+            chaos_entry["removed_count"] = removed_count
         self.add_conversation_entry("chaos", **chaos_entry)
 
     def record_token_usage(

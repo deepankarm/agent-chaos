@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from agent_chaos.core.context import chaos_context, ChaosContext
+from agent_chaos.core.context import ChaosContext, chaos_context
 from agent_chaos.event.jsonl import JsonlEventSink
 from agent_chaos.scenario.assertions import AssertionResult
 from agent_chaos.scenario.model import Scenario
@@ -72,6 +72,7 @@ def run_scenario(
     try:
         with chaos_context(
             name=scenario.name,
+            description=scenario.description,
             chaos=scenario.chaos,
             providers=scenario.providers,
             emit_events=False,
@@ -196,6 +197,7 @@ def run_scenario(
         trace_id=trace_id,
         passed=passed,
         elapsed_s=scorecard.get("elapsed_s") or 0.0,
+        description=scenario.description,
         assertion_results=assertion_results,
         error=scorecard.get("error"),
         scorecard=scorecard,

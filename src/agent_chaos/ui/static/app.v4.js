@@ -13,7 +13,7 @@ const state = {
     tracesHash: '',
     theme: localStorage.getItem('theme') || 'dark',
     filter: 'all',
-    typeFilter: null, // null = all types, or 'llm', 'stream', 'tool', 'context'
+    typeFilter: [], // Array of selected types: ['user_input', 'llm', 'stream', 'tool', 'context']
     selectedTraceId: null,
 };
 
@@ -25,6 +25,19 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = String(str);
     return div.innerHTML;
+}
+
+// Mapping for chaos type display names
+const CHAOS_TYPE_LABELS = {
+    'user_input': 'User Input',
+    'llm': 'LLM Call',
+    'stream': 'LLM Streaming',
+    'tool': 'Tools',
+    'context': 'Context',
+};
+
+function getChaosTypeLabel(type) {
+    return CHAOS_TYPE_LABELS[type] || type.toUpperCase();
 }
 
 function formatTime(isoString) {
@@ -106,6 +119,11 @@ function extractFaults(trace) {
                     target_tool: e.data?.target_tool,
                     original: e.data?.original,
                     mutated: e.data?.mutated,
+                    // Context mutation details
+                    added_messages: e.data?.added_messages,
+                    removed_messages: e.data?.removed_messages,
+                    added_count: e.data?.added_count,
+                    removed_count: e.data?.removed_count,
                     spanId: s.span_id,
                     timestamp: e.timestamp,
                 });
@@ -188,6 +206,11 @@ function buildConversation(trace) {
                     target_tool: e.data?.target_tool,
                     original: e.data?.original,
                     mutated: e.data?.mutated,
+                    // Context mutation details
+                    added_messages: e.data?.added_messages,
+                    removed_messages: e.data?.removed_messages,
+                    added_count: e.data?.added_count,
+                    removed_count: e.data?.removed_count,
                     timestamp_ms: null,
                 });
             }
@@ -317,17 +340,19 @@ function getChaosTypeBadge(trace) {
         return `<span class="chaos-type-badge multiple">MULTIPLE</span>`;
     }
     
-    // Single type - use the chaos_point
+    // Single type - use the chaos_point and display label
     const point = [...uniquePoints][0] || 'unknown';
     const cssClass = point.toLowerCase();
+    const displayLabel = getChaosTypeLabel(cssClass);
     
-    return `<span class="chaos-type-badge ${cssClass}">${point}</span>`;
+    return `<span class="chaos-type-badge ${cssClass}">${displayLabel}</span>`;
 }
 
 // Fallback for older events without chaos_point field
 function getChaosPointFallback(faultType) {
     if (!faultType) return 'UNKNOWN';
     const type = faultType.toLowerCase();
+    if (type.includes('user_input') || type.includes('user_mutate')) return 'USER_INPUT';
     if (type.includes('stream') || type.includes('ttft') || type.includes('chunk') || type.includes('hang')) return 'STREAM';
     if (type.includes('tool') || type.includes('mutate')) return 'TOOL';
     if (type.includes('context') || type.includes('truncate') || type.includes('distractor')) return 'CONTEXT';
@@ -351,6 +376,7 @@ function renderScenarioCard(trace) {
     const passedAssertions = assertions.filter(a => a.passed);
     const passedCount = passedAssertions.length;
     const chaosCount = trace.fault_count || 0;
+    const description = trace.description || '';
 
     // Build tooltip content
     const faults = extractFaults(trace);
@@ -378,11 +404,16 @@ function renderScenarioCard(trace) {
         }
     }
 
+    // Build description tooltip for card hover (positioned below to avoid header)
+    const descriptionTooltip = description 
+        ? `<div class="tooltip tooltip-below"><div class="tooltip-title">Description</div><div class="tooltip-item tooltip-description">${escapeHtml(description)}</div></div>`
+        : '';
+
     return `
-        <div class="${cardClass}" data-trace-id="${trace.trace_id}">
+        <div class="${cardClass} ${description ? 'has-description' : ''}" data-trace-id="${trace.trace_id}">
             <div class="card-header">
                 <div class="card-identity">
-                    <div class="card-name">${escapeHtml(trace.name)}</div>
+                    <div class="card-name ${description ? 'has-tooltip' : ''}">${escapeHtml(trace.name)}${descriptionTooltip}</div>
                     <div class="card-meta">${getChaosTypeBadge(trace)}${statsHtml}</div>
                 </div>
                 <div class="card-outcome">
@@ -407,13 +438,61 @@ function applyFilter(filter) {
     renderScenarios();
 }
 
-function applyTypeFilter(type) {
-    // Toggle - clicking same type clears it
-    state.typeFilter = state.typeFilter === type ? null : type;
-    document.querySelectorAll('#typeFilters .filter-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.type === state.typeFilter);
-    });
+function toggleTypeFilter(type) {
+    // Toggle - add if not present, remove if present
+    const index = state.typeFilter.indexOf(type);
+    if (index > -1) {
+        state.typeFilter.splice(index, 1);
+    } else {
+        state.typeFilter.push(type);
+    }
+    updateChaosTypeFilterUI();
     renderScenarios();
+}
+
+function updateChaosTypeFilterUI() {
+    // Update checkboxes
+    document.querySelectorAll('#chaosTypeDropdown input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = state.typeFilter.includes(checkbox.dataset.type);
+    });
+    
+    // Update chips
+    const chipsContainer = document.getElementById('chaosTypeChips');
+    chipsContainer.innerHTML = '';
+    
+    state.typeFilter.forEach(type => {
+        const chip = document.createElement('span');
+        chip.className = 'chaos-type-chip';
+        chip.setAttribute('data-type', type);
+        chip.innerHTML = `${getChaosTypeLabel(type)} <span class="chip-remove" data-type="${type}">×</span>`;
+        chipsContainer.appendChild(chip);
+    });
+    
+    // Update dropdown trigger appearance
+    const trigger = document.getElementById('chaosTypeDropdownTrigger');
+    if (state.typeFilter.length > 0) {
+        trigger.classList.add('has-selection');
+    } else {
+        trigger.classList.remove('has-selection');
+    }
+}
+
+function toggleDropdown() {
+    const dropdown = document.getElementById('chaosTypeDropdown');
+    const trigger = document.getElementById('chaosTypeDropdownTrigger');
+    const isOpen = dropdown.classList.toggle('open');
+    if (isOpen) {
+        trigger.classList.add('dropdown-open');
+    } else {
+        trigger.classList.remove('dropdown-open');
+    }
+}
+
+function closeDropdown() {
+    const dropdown = document.getElementById('chaosTypeDropdown');
+    const trigger = document.getElementById('chaosTypeDropdownTrigger');
+    dropdown.classList.remove('open');
+    trigger.classList.remove('dropdown-open');
 }
 
 function getFilteredTraces() {
@@ -429,12 +508,15 @@ function getFilteredTraces() {
             break;
     }
     
-    // Apply type filter based on chaos_point from faults
-    if (state.typeFilter) {
+    // Apply type filter based on chaos_point from faults (multi-select)
+    if (state.typeFilter.length > 0) {
         traces = traces.filter(t => {
             const faults = extractFaults(t);
             const points = faults.map(f => (f.chaos_point || getChaosPointFallback(f.type)).toUpperCase());
-            return points.includes(state.typeFilter.toUpperCase());
+            // Check if any of the selected types match any of the trace's chaos points
+            return state.typeFilter.some(selectedType => 
+                points.includes(selectedType.toUpperCase())
+            );
         });
     }
     
@@ -578,13 +660,48 @@ function renderConversationEntry(entry, index) {
             
         case 'chaos':
             let diffHtml = '';
-            if (entry.original && entry.mutated) {
+            // Priority 1: Context mutations with added messages
+            if (entry.added_messages && Array.isArray(entry.added_messages) && entry.added_messages.length > 0) {
+                const addedHtml = entry.added_messages.map(msg => `
+                    <div class="context-message added">
+                        <span class="msg-role">[${escapeHtml(msg.role)}]</span>
+                        <span class="msg-content">${escapeHtml(truncateText(msg.content, 200))}</span>
+                    </div>
+                `).join('');
+                diffHtml = `
+                    <div class="chaos-diff context-diff">
+                        <div class="diff-header">Injected messages:</div>
+                        ${addedHtml}
+                    </div>
+                `;
+            }
+            // Priority 2: Context mutations with removed messages
+            else if (entry.removed_messages && Array.isArray(entry.removed_messages) && entry.removed_messages.length > 0) {
+                const removedHtml = entry.removed_messages.map(msg => `
+                    <div class="context-message removed">
+                        <span class="msg-role">[${escapeHtml(msg.role)}]</span>
+                        <span class="msg-content">${escapeHtml(truncateText(msg.content, 200))}</span>
+                    </div>
+                `).join('');
+                diffHtml = `
+                    <div class="chaos-diff context-diff">
+                        <div class="diff-header">Removed messages:</div>
+                        ${removedHtml}
+                    </div>
+                `;
+            }
+            // Priority 3: Tool mutations (original → mutated)
+            else if (entry.original && entry.mutated) {
                 diffHtml = `
                     <div class="chaos-diff">
                         <span class="diff-line removed">${escapeHtml(truncateText(entry.original, 100))}</span>
                         <span class="diff-line added">${escapeHtml(truncateText(entry.mutated, 100))}</span>
                     </div>
                 `;
+            }
+            // Fallback: just show original summary
+            else if (entry.original) {
+                diffHtml = `<div class="chaos-summary">${escapeHtml(entry.original)}</div>`;
             }
             return `
                 <div class="timeline-row chaos">
@@ -656,7 +773,7 @@ function renderSummarySections(trace) {
                         const pointLower = point.toLowerCase();
                         return `
                         <div class="section-item chaos-item">
-                            <span class="chaos-category-tag ${pointLower}">${point}</span>
+                            <span class="chaos-category-tag ${pointLower}">${getChaosTypeLabel(pointLower)}</span>
                             <span class="item-text">${escapeHtml(f.type)}${f.target_tool ? ` → ${escapeHtml(f.target_tool)}` : ''}</span>
                         </div>
                     `;}).join('')}
@@ -701,12 +818,17 @@ function openScenarioModal(traceId) {
     const modal = document.getElementById('scenarioModal');
     const report = trace.report || {};
     const passed = trace.status === 'success' || report.passed;
+    const description = trace.description || '';
     
     document.getElementById('modalTitle').innerHTML = `
         ${escapeHtml(trace.name)}
         <span class="outcome-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
     `;
-    document.getElementById('modalSubtitle').textContent = trace.trace_id;
+    // Show trace_id and description together in subtitle - full text, no truncation
+    const subtitleText = description 
+        ? `${trace.trace_id} · ${description}`
+        : trace.trace_id;
+    document.getElementById('modalSubtitle').textContent = subtitleText;
     
     document.getElementById('modalBody').innerHTML = 
         renderConversationTimeline(trace) + 
@@ -731,6 +853,7 @@ function handleEvent(event) {
             state.traces[event.trace_id] = {
                 trace_id: event.trace_id,
                 name: event.trace_name,
+                description: event.data?.description || '',
                 start_time: event.timestamp,
                 status: 'running',
                 total_calls: 0, failed_calls: 0, fault_count: 0,
@@ -844,10 +967,40 @@ function init() {
         tab.addEventListener('click', () => applyFilter(tab.dataset.filter));
     });
     
-    // Type filter tabs
-    document.querySelectorAll('#typeFilters .filter-tab').forEach(tab => {
-        tab.addEventListener('click', () => applyTypeFilter(tab.dataset.type));
+    // Chaos type dropdown
+    const dropdownTrigger = document.getElementById('chaosTypeDropdownTrigger');
+    const dropdown = document.getElementById('chaosTypeDropdown');
+    
+    dropdownTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleDropdown();
     });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !dropdownTrigger.contains(e.target)) {
+            closeDropdown();
+        }
+    });
+    
+    // Handle checkbox changes
+    document.querySelectorAll('#chaosTypeDropdown input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            toggleTypeFilter(checkbox.dataset.type);
+        });
+    });
+    
+    // Handle chip remove clicks
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('chip-remove')) {
+            e.stopPropagation();
+            const type = e.target.dataset.type;
+            toggleTypeFilter(type);
+        }
+    });
+    
+    // Initialize UI
+    updateChaosTypeFilterUI();
     
     document.getElementById('modalClose').addEventListener('click', closeScenarioModal);
     document.getElementById('modalBackdrop').addEventListener('click', closeScenarioModal);

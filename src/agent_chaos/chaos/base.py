@@ -8,10 +8,11 @@ from typing import Any, Protocol, runtime_checkable
 class ChaosPoint(str, Enum):
     """Injection points for chaos."""
 
+    USER_INPUT = "user_input"  # Before agent processes → mutate user query
     LLM_CALL = "llm_call"  # Before LLM call → raise exception
     STREAM = "stream"  # During streaming → hang/cut/slow
     TOOL_RESULT = "tool_result"  # After tool returns → mutate result
-    MESSAGES = "messages"  # Before LLM call → mutate messages array
+    MESSAGES = "messages"  # Before LLM call → mutate messages array (RAG/memory)
 
 
 @dataclass

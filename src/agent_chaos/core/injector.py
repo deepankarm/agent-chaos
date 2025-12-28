@@ -1,5 +1,3 @@
-"""Chaos injection logic — routes chaos to the right injection points."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -24,6 +22,7 @@ class ChaosInjector:
     def __init__(self, chaos: list[Chaos | ChaosBuilder] | None = None):
         all_chaos = [_build_if_needed(c) for c in (chaos or [])]
 
+        self._user_chaos: list[Chaos] = []
         self._llm_chaos: list[Chaos] = []
         self._stream_chaos: list[Chaos] = []
         self._tool_chaos: list[Chaos] = []
@@ -31,7 +30,9 @@ class ChaosInjector:
 
         for c in all_chaos:
             point = c.point
-            if point == ChaosPoint.LLM_CALL:
+            if point == ChaosPoint.USER_INPUT:
+                self._user_chaos.append(c)
+            elif point == ChaosPoint.LLM_CALL:
                 self._llm_chaos.append(c)
             elif point == ChaosPoint.STREAM:
                 self._stream_chaos.append(c)
@@ -41,6 +42,7 @@ class ChaosInjector:
                 self._context_chaos.append(c)
 
         self._call_count = 0
+        self._user_chaos_applied = False
         self._chaos_used: set[tuple[str, int]] = set()
         self._ctx: ChaosContext | None = None
 
@@ -153,3 +155,25 @@ class ChaosInjector:
                 return (chaos.apply(messages=messages, ctx=self._ctx), chaos)
 
         return None
+
+    def apply_user_chaos(self, query: str) -> tuple[str, Chaos | None]:
+        """Apply user input chaos to the query. Returns (mutated_query, chaos_obj).
+
+        User input chaos is applied once at the start of the scenario.
+        """
+        if self._user_chaos_applied:
+            return query, None
+
+        self._user_chaos_applied = True
+
+        for chaos in self._user_chaos:
+            if chaos.should_trigger(0):  # User input doesn't depend on call count
+                result = chaos.apply(query=query, ctx=self._ctx)
+                if result.action == "mutate" and result.mutated is not None:
+                    return result.mutated, chaos
+
+        return query, None
+
+    def has_user_chaos(self) -> bool:
+        """Check if user input chaos is configured."""
+        return bool(self._user_chaos)

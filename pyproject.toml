@@ -25,5 +25,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "deepeval>=3.7.6",
     "ruff>=0.14.10",
 ]

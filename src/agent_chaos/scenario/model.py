@@ -18,6 +18,7 @@ class Scenario:
 
     Attributes:
         name: Unique scenario name.
+        description: Human-readable description of what this scenario tests.
         agent: Callable that runs the agent under test.
             - If it accepts 'ctx' argument, it will be passed the ChaosContext.
             - Otherwise it will be called with no arguments.
@@ -32,6 +33,7 @@ class Scenario:
 
         scenario = Scenario(
             name="rate-limit-recovery",
+            description="Tests agent resilience to LLM rate limit errors",
             agent=my_driver,
             chaos=[
                 llm_rate_limit().after_calls(2),
@@ -42,6 +44,7 @@ class Scenario:
     """
 
     name: str
+    description: str
     agent: Callable[..., Any]
     chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
     providers: list[str] = field(default_factory=lambda: ["anthropic"])

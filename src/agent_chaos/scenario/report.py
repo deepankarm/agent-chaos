@@ -15,6 +15,7 @@ class RunReport:
     trace_id: str
     passed: bool
     elapsed_s: float
+    description: str = ""
     assertion_results: list[AssertionResult] = field(default_factory=list)
     error: str | None = None
     scorecard: dict[str, Any] = field(default_factory=dict)

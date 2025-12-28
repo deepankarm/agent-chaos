@@ -37,6 +37,7 @@ def chaos_context(
     providers: list[str] | None = None,
     emit_events: bool = False,
     event_sink: Any | None = None,
+    description: str = "",
 ) -> Iterator[ChaosContext]:
     """Context manager for scoped chaos injection.
 
@@ -48,6 +49,7 @@ def chaos_context(
         providers: List of providers to patch (default: ["anthropic"])
         emit_events: If True, emit events to the UI dashboard
         event_sink: Optional event sink for artifact persistence (e.g. JSONL)
+        description: Optional description of the scenario (shown in UI)
 
     Yields:
         ChaosContext with injector and metrics access
@@ -62,6 +64,7 @@ def chaos_context(
 
         with chaos_context(
             name="test",
+            description="Tests agent resilience to various failures",
             chaos=[
                 llm_rate_limit().after_calls(2),
                 llm_stream_cut(after_chunks=10),
@@ -80,7 +83,7 @@ def chaos_context(
         from agent_chaos.ui.events import event_bus
 
         metrics.set_event_bus(event_bus)
-        session_id = event_bus.start_session(name)
+        session_id = event_bus.start_session(name, description)
         metrics.set_trace_context(event_bus.trace_id, name)
 
     if event_sink is not None:

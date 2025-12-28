@@ -42,11 +42,37 @@
                         <button class="filter-tab" data-filter="passed">Passed</button>
                         <button class="filter-tab" data-filter="failed">Failed</button>
                     </div>
-                    <div class="filter-tabs type-filters" id="typeFilters">
-                        <button class="filter-tab" data-type="llm">LLM</button>
-                        <button class="filter-tab" data-type="stream">Stream</button>
-                        <button class="filter-tab" data-type="tool">Tool</button>
-                        <button class="filter-tab" data-type="context">Context</button>
+                    <div class="chaos-type-filter" id="chaosTypeFilter">
+                        <button class="chaos-type-dropdown-trigger" id="chaosTypeDropdownTrigger">
+                            <span class="chaos-type-label">Chaos Type</span>
+                            <span class="chaos-type-arrow">▾</span>
+                        </button>
+                        <div class="chaos-type-chips" id="chaosTypeChips"></div>
+                        <div class="chaos-type-dropdown" id="chaosTypeDropdown">
+                            <div class="dropdown-header">Filter by chaos type</div>
+                            <div class="dropdown-options">
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="user_input" data-type="user_input">
+                                    <span>User Input</span>
+                                </label>
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="llm" data-type="llm">
+                                    <span>LLM Call</span>
+                                </label>
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="stream" data-type="stream">
+                                    <span>LLM Streaming</span>
+                                </label>
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="tool" data-type="tool">
+                                    <span>Tools</span>
+                                </label>
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="context" data-type="context">
+                                    <span>Context</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

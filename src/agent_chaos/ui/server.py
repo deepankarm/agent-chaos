@@ -53,6 +53,7 @@ async def get_traces(
         {
             "trace_id": t.trace_id,
             "name": t.name,
+            "description": t.description,
             "start_time": t.start_time,
             "end_time": t.end_time,
             "status": t.status,
@@ -238,6 +239,9 @@ def _load_artifact_traces(runs_dir: Path) -> list[dict]:
             {
                 "trace_id": trace_id,
                 "name": name,
+                "description": report.get("description")
+                or report.get("scenario_description")
+                or "",
                 "start_time": trace_start_ts or "",
                 "end_time": trace_end_ts,
                 "status": "success" if passed else "error",
