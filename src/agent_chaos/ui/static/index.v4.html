@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🃏 agent-chaos · Resilience Dashboard</title>
-    <link rel="stylesheet" href="/static/styles.v3.css?v=3.3">
+    <title>🃏 agent-chaos · Conversation Timeline</title>
+    <link rel="stylesheet" href="/static/styles.v4.css?v=4.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
@@ -13,6 +13,9 @@
         <div class="logo">
             <span class="logo-icon">🃏</span>
             <span class="logo-text">agent-chaos</span>
+        </div>
+        <div class="header-stats" id="headerStats">
+            <!-- Dynamic stats populated by JS -->
         </div>
         <div class="header-controls">
             <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
@@ -32,12 +35,19 @@
         <!-- Scenarios Section -->
         <section class="scenarios-section">
             <div class="section-header">
-                <h2 class="section-title">Chaos Scenarios <span class="section-count" id="scenarioCount">0</span></h2>
-                <div class="filter-tabs" id="filterTabs">
-                    <button class="filter-tab active" data-filter="all">All</button>
-                    <button class="filter-tab" data-filter="passed">Passed</button>
-                    <button class="filter-tab" data-filter="failed">Failed</button>
-                    <button class="filter-tab" data-filter="chaos">With Chaos</button>
+                <h2 class="section-title">Scenarios <span class="section-count" id="scenarioCount">0</span></h2>
+                <div class="filter-groups">
+                    <div class="filter-tabs" id="filterTabs">
+                        <button class="filter-tab active" data-filter="all">All</button>
+                        <button class="filter-tab" data-filter="passed">Passed</button>
+                        <button class="filter-tab" data-filter="failed">Failed</button>
+                    </div>
+                    <div class="filter-tabs type-filters" id="typeFilters">
+                        <button class="filter-tab" data-type="llm">LLM</button>
+                        <button class="filter-tab" data-type="stream">Stream</button>
+                        <button class="filter-tab" data-type="tool">Tool</button>
+                        <button class="filter-tab" data-type="context">Context</button>
+                    </div>
                 </div>
             </div>
             
@@ -54,7 +64,7 @@
         </section>
     </main>
 
-    <!-- Scenario Detail Modal -->
+    <!-- Scenario Detail Modal with Conversation Timeline -->
     <div class="modal hidden" id="scenarioModal">
         <div class="modal-backdrop" id="modalBackdrop"></div>
         <div class="modal-panel">
@@ -66,11 +76,12 @@
                 <button class="modal-close" id="modalClose">✕</button>
             </div>
             <div class="modal-body" id="modalBody">
-                <!-- Dynamic content -->
+                <!-- Dynamic conversation timeline content -->
             </div>
         </div>
     </div>
 
-    <script src="/static/app.v3.js?v=3.3"></script>
+    <script src="/static/app.v4.js?v=4.0"></script>
 </body>
 </html>
+
