@@ -190,16 +190,7 @@ def get_tool_correctness_metric():
     )
 
 
-# =============================================================================
-# DeepEval Quality Scenarios
-#
-# NOTE: Factory functions (get_task_completion_metric, etc.) are passed WITHOUT
-# calling them. The DeepEval integration lazily creates the metrics only when
-# assertions are evaluated. This avoids requiring API keys at import time.
-# =============================================================================
-
 deepeval_scenarios = [
-    # Scenario 1: Task completion under normal conditions (baseline)
     Scenario(
         name="deepeval-baseline-task-completion",
         description="Verify basic task completion with LLM-as-judge (no chaos)",
@@ -212,12 +203,10 @@ deepeval_scenarios = [
         assertions=[
             AllTurnsComplete(),
             CompletesWithin(120.0),
-            # Pass factory function for lazy metric creation (avoids API key at import)
             as_assertion(get_task_completion_metric),
         ],
         meta={"kind": "deepeval", "type": "baseline"},
     ),
-    # Scenario 2: Task completion when tools fail
     Scenario(
         name="deepeval-error-handling",
         description="Verify graceful error handling when tools fail",
@@ -241,7 +230,6 @@ deepeval_scenarios = [
         ],
         meta={"kind": "deepeval", "type": "error_handling"},
     ),
-    # Scenario 3: Agent should catch corrupted data
     Scenario(
         name="deepeval-data-corruption-detection",
         description="Test if agent catches and handles corrupted tool results",
@@ -268,7 +256,6 @@ deepeval_scenarios = [
         ],
         meta={"kind": "deepeval", "type": "data_corruption"},
     ),
-    # Scenario 4: Multi-turn with tool usage verification
     Scenario(
         name="deepeval-tool-usage-verification",
         description="Verify agent uses correct tools in multi-turn conversation",
@@ -292,7 +279,6 @@ deepeval_scenarios = [
         ],
         meta={"kind": "deepeval", "type": "tool_verification"},
     ),
-    # Scenario 5: Complex multi-turn with chaos AND quality checks
     Scenario(
         name="deepeval-multi-turn-chaos-quality",
         description="Full multi-turn with chaos injection AND LLM quality evaluation",
@@ -315,14 +301,11 @@ deepeval_scenarios = [
             AllTurnsComplete(allow_failures=1),
             MaxTotalLLMCalls(15),
             CompletesWithin(180.0),
-            # LLM-as-judge: Did it still complete the task well?
             as_assertion(get_task_completion_metric),
-            # LLM-as-judge: Did it handle errors gracefully?
             as_assertion(get_error_handling_metric),
         ],
         meta={"kind": "deepeval", "type": "comprehensive"},
     ),
-    # Scenario 6: Hallucinated product info
     Scenario(
         name="deepeval-hallucination-detection",
         description="Test if agent catches hallucinated product information",
@@ -347,15 +330,9 @@ deepeval_scenarios = [
         ],
         meta={"kind": "deepeval", "type": "hallucination"},
     ),
-    # =========================================================================
-    # Scenario 7: Per-Turn Evaluation (4 turns)
-    #
-    # Demonstrates Turn.assertions - each turn has its own assertion that
-    # runs immediately after that turn completes. Natural per-turn evaluation.
-    # =========================================================================
     Scenario(
-        name="deepeval-per-turn-evaluation",
-        description="Evaluate each turn separately using Turn.assertions",
+        name="deepeval-per-turn-and-conversation-evaluation",
+        description="Evaluate each turn separately using Turn.assertions and evaluate the entire conversation holistically",
         agent=run_support_agent,
         turns=[
             Turn(
@@ -387,36 +364,11 @@ deepeval_scenarios = [
         assertions=[
             AllTurnsComplete(),
             CompletesWithin(180.0),
-        ],
-        meta={"kind": "deepeval", "type": "per_turn", "turns": 4},
-    ),
-    # =========================================================================
-    # Scenario 8: Whole Conversation Evaluation (4 turns)
-    #
-    # Demonstrates Scenario.assertions - evaluated after ALL turns complete.
-    # LLM judge sees full conversation context for holistic evaluation.
-    # =========================================================================
-    Scenario(
-        name="deepeval-conversation-evaluation",
-        description="Evaluate entire conversation holistically",
-        agent=run_support_agent,
-        turns=[
-            Turn("Hi, I need help with a recent order."),
-            Turn("The order number is ORD-67890."),
-            Turn("When will it arrive? I need it for a meeting."),
-            Turn("Actually, can I get expedited shipping if possible?"),
-        ],
-        chaos=[],
-        assertions=[
-            AllTurnsComplete(),
-            CompletesWithin(180.0),
-            # Whole conversation evaluation: evaluated after all turns
-            # LLM judge sees: [Turn 1] User: ... [Turn 2] User: ... etc.
             as_assertion(
                 get_task_completion_metric,
                 name="conversation-task-completion",
             ),
         ],
-        meta={"kind": "deepeval", "type": "conversation", "turns": 4},
+        meta={"kind": "deepeval", "type": "per_turn_and_conversation", "turns": 4},
     ),
 ]

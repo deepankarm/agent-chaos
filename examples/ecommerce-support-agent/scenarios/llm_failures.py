@@ -39,7 +39,7 @@ llm_failure_scenarios = [
         turns=[
             Turn(
                 "Check if I can get a refund for order ORD-67890 and process it if eligible"
-            ),
+            )
         ],
         chaos=[llm_rate_limit().after_calls(2)],
         assertions=[MinChaosInjected(1)],
