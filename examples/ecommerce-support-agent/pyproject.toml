@@ -1,0 +1,22 @@
+[project]
+name = "ecommerce-support-agent"
+version = "0.1.0"
+description = "E-commerce customer support agent for demonstrating agent-chaos capabilities"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-ai>=1.39.0",
+    "agent-chaos @ file:///${PROJECT_ROOT}/../..",
+    "deepeval>=3.7.6",
+]
+
+[tool.uv.sources]
+agent-chaos = { path = "../.." }
+
+[tool.ruff]
+line-length = 120
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+]
