@@ -19,12 +19,19 @@ class UserInputChaos:
 
     probability: float = 1.0
     always: bool = True  # User input mutations typically always apply
+    # Turn-based triggers
+    on_turn: int | None = None
+    after_turns: int | None = None
+    between_turns: tuple[int, int] | None = None
     _trigger: TriggerConfig = field(init=False)
 
     def __post_init__(self):
         self._trigger = TriggerConfig(
             probability=self.probability,
             always=self.always,
+            on_turn=self.on_turn,
+            after_turns=self.after_turns,
+            between_turns=self.between_turns,
         )
 
     @property
@@ -32,9 +39,14 @@ class UserInputChaos:
         return ChaosPoint.USER_INPUT
 
     def should_trigger(self, call_number: int = 0, **kwargs: Any) -> bool:
-        # User input mutations don't depend on call number
-        # They apply once at the start
-        return self._trigger.should_trigger(call_number)
+        # User input mutations can use turn-based triggers
+        current_turn = kwargs.get("current_turn", 0)
+        completed_turns = kwargs.get("completed_turns", 0)
+        return self._trigger.should_trigger(
+            call_number,
+            current_turn=current_turn,
+            completed_turns=completed_turns,
+        )
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         """Apply user input mutation. Override in subclasses."""

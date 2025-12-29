@@ -1,11 +1,40 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
+
+
+def _suppress_event_loop_closed_errors() -> None:
+    """Suppress 'Event loop is closed' errors from httpx client cleanup.
+
+    Libraries like pydantic-ai and anthropic create httpx.AsyncClient instances
+    internally. When asyncio.run() closes the event loop, these clients try to
+    clean up their connections but the loop is already closed, causing noisy
+    (but harmless) RuntimeError exceptions.
+
+    This suppresses asyncio's "Task exception was never retrieved" log messages
+    when the event loop is closed.
+    """
+
+    class EventLoopClosedFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            if "Event loop is closed" in msg:
+                return False
+            if record.exc_info:
+                exc = record.exc_info[1]
+                if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
+                    return False
+            return True
+
+    logging.getLogger("asyncio").addFilter(EventLoopClosedFilter())
 
 
 def main() -> None:
     """Console script entry point (`agent-chaos`)."""
+    _suppress_event_loop_closed_errors()
+
     parser = argparse.ArgumentParser(
         prog="agent-chaos",
         description="Chaos engineering harness for AI agents (CLI-first).",

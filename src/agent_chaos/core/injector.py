@@ -46,9 +46,35 @@ class ChaosInjector:
         self._chaos_used: set[tuple[str, int]] = set()
         self._ctx: ChaosContext | None = None
 
+        # Turn tracking
+        self._current_turn: int = 0
+        self._completed_turns: int = 0
+
     def set_context(self, ctx: ChaosContext) -> None:
         """Set the ChaosContext reference for advanced chaos functions."""
         self._ctx = ctx
+
+    def set_current_turn(self, turn_number: int) -> None:
+        """Set the current turn number for turn-based chaos triggering.
+
+        Args:
+            turn_number: 1-indexed turn number.
+        """
+        self._current_turn = turn_number
+
+    def complete_turn(self) -> None:
+        """Mark the current turn as completed."""
+        self._completed_turns = self._current_turn
+
+    @property
+    def current_turn(self) -> int:
+        """Get the current turn number (1-indexed, 0 means no turn started)."""
+        return self._current_turn
+
+    @property
+    def completed_turns(self) -> int:
+        """Get the number of completed turns."""
+        return self._completed_turns
 
     def increment_call(self) -> int:
         """Increment and return call count."""
@@ -64,7 +90,12 @@ class ChaosInjector:
             if chaos_id in self._chaos_used:
                 continue
 
-            if chaos.should_trigger(call_number, provider=provider):
+            if chaos.should_trigger(
+                call_number,
+                provider=provider,
+                current_turn=self._current_turn,
+                completed_turns=self._completed_turns,
+            ):
                 self._chaos_used.add(chaos_id)
                 return chaos.apply(provider=provider)
 
@@ -130,7 +161,12 @@ class ChaosInjector:
         call_number = self._call_count
 
         for chaos in self._tool_chaos:
-            if chaos.should_trigger(call_number, tool_name=tool_name):
+            if chaos.should_trigger(
+                call_number,
+                tool_name=tool_name,
+                current_turn=self._current_turn,
+                completed_turns=self._completed_turns,
+            ):
                 return (
                     chaos.apply(tool_name=tool_name, result=result, ctx=self._ctx),
                     chaos,
@@ -151,7 +187,11 @@ class ChaosInjector:
         call_number = self._call_count
 
         for chaos in self._context_chaos:
-            if chaos.should_trigger(call_number):
+            if chaos.should_trigger(
+                call_number,
+                current_turn=self._current_turn,
+                completed_turns=self._completed_turns,
+            ):
                 return (chaos.apply(messages=messages, ctx=self._ctx), chaos)
 
         return None

@@ -25,6 +25,10 @@ class LLMChaos:
     probability: float | None = None
     provider: str | None = None
     always: bool = False
+    # Turn-based triggers
+    on_turn: int | None = None
+    after_turns: int | None = None
+    between_turns: tuple[int, int] | None = None
     _trigger: TriggerConfig = field(init=False)
 
     def __post_init__(self):
@@ -34,6 +38,9 @@ class LLMChaos:
             probability=self.probability,
             provider=self.provider,
             always=self.always,
+            on_turn=self.on_turn,
+            after_turns=self.after_turns,
+            between_turns=self.between_turns,
         )
 
     @property
@@ -42,7 +49,14 @@ class LLMChaos:
 
     def should_trigger(self, call_number: int, **kwargs: Any) -> bool:
         provider = kwargs.get("provider")
-        return self._trigger.should_trigger(call_number, provider)
+        current_turn = kwargs.get("current_turn", 0)
+        completed_turns = kwargs.get("completed_turns", 0)
+        return self._trigger.should_trigger(
+            call_number,
+            provider=provider,
+            current_turn=current_turn,
+            completed_turns=completed_turns,
+        )
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         provider = kwargs.get("provider", "anthropic")

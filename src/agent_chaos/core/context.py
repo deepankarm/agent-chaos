@@ -1,12 +1,17 @@
 """Chaos context manager and context object."""
 
+from __future__ import annotations
+
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 
 from agent_chaos.chaos.base import Chaos
 from agent_chaos.chaos.builder import ChaosBuilder
 from agent_chaos.core.injector import ChaosInjector
 from agent_chaos.core.metrics import MetricsStore
+
+if TYPE_CHECKING:
+    from agent_chaos.scenario.model import TurnResult
 
 
 class ChaosContext:
@@ -28,6 +33,108 @@ class ChaosContext:
         self.elapsed_s: float | None = None
         self.agent_input: str | None = None
         self.agent_output: str | None = None
+
+        # Turn tracking
+        self.current_turn: int = 0
+        self.turn_results: list[TurnResult] = []
+        self._turn_start_calls: int = 0  # LLM calls at turn start
+        self._turn_start_time: float = 0.0
+
+        # Agent state - persists across turns for framework-specific data
+        # (e.g., pydantic-ai message_history, langchain memory, etc.)
+        self.agent_state: dict[str, Any] = {}
+
+    def start_turn(self, turn_number: int, turn_input: str) -> None:
+        """Called by framework at start of each turn.
+
+        Args:
+            turn_number: 1-indexed turn number.
+            turn_input: The input text for this turn.
+        """
+        import time
+
+        self.current_turn = turn_number
+        self._turn_start_calls = self.metrics.total_calls
+        self._turn_start_time = time.monotonic()
+
+        # Reset user message flag so each turn can record its user message
+        self.metrics._user_message_recorded = False
+
+        # Update metrics current turn for conversation tracking
+        self.metrics.set_current_turn(turn_number)
+
+        # Update injector's current turn for chaos triggering
+        self.injector.set_current_turn(turn_number)
+
+        # Record turn start in conversation
+        self.metrics.add_conversation_entry(
+            "turn_start",
+            turn_number=turn_number,
+            input=turn_input,
+            input_type="dynamic" if hasattr(self, "_current_turn_dynamic") and self._current_turn_dynamic else "static",
+        )
+
+    def end_turn(
+        self,
+        turn_input: str,
+        response: str,
+        success: bool,
+        error: str | None = None,
+    ) -> "TurnResult":
+        """Called by framework at end of each turn.
+
+        Args:
+            turn_input: The input text for this turn.
+            response: The agent's response.
+            success: Whether the turn completed successfully.
+            error: Error message if turn failed.
+
+        Returns:
+            TurnResult for this turn.
+        """
+        import time
+
+        from agent_chaos.scenario.model import TurnResult
+
+        duration_s = time.monotonic() - self._turn_start_time
+        llm_calls = self.metrics.total_calls - self._turn_start_calls
+
+        turn_result = TurnResult(
+            turn_number=self.current_turn,
+            input=turn_input,
+            response=response,
+            success=success,
+            duration_s=duration_s,
+            llm_calls=llm_calls,
+            error=error,
+        )
+        self.turn_results.append(turn_result)
+
+        # Record turn end in conversation
+        self.metrics.add_conversation_entry(
+            "turn_end",
+            turn_number=self.current_turn,
+            success=success,
+            duration_s=duration_s,
+            llm_calls=llm_calls,
+            error=error,
+        )
+
+        return turn_result
+
+    def get_turn_result(self, turn_number: int) -> "TurnResult | None":
+        """Get the result for a specific turn.
+
+        Args:
+            turn_number: 1-indexed turn number.
+
+        Returns:
+            TurnResult for the turn, or None if not found.
+        """
+        for result in self.turn_results:
+            if result.turn_number == turn_number:
+                return result
+        return None
 
 
 @contextmanager

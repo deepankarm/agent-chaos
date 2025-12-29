@@ -211,3 +211,5 @@ __marimo__/
 
 local_data/
 .agent_chaos_runs/
+
+.deepeval/

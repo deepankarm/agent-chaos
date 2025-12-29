@@ -15,6 +15,9 @@ const state = {
     filter: 'all',
     typeFilter: [], // Array of selected types: ['user_input', 'llm', 'stream', 'tool', 'context']
     selectedTraceId: null,
+    viewMode: localStorage.getItem('viewMode') || 'grid', // 'grid' or 'list'
+    sortColumn: 'timestamp', // default sort by time
+    sortDirection: 'desc', // 'asc' or 'desc'
 };
 
 // ============================================================
@@ -27,8 +30,24 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function renderMarkdown(str) {
+    if (str == null) return '';
+    try {
+        // Configure marked for safety
+        marked.setOptions({
+            breaks: true,      // Convert \n to <br>
+            gfm: true,         // GitHub Flavored Markdown
+        });
+        return marked.parse(String(str));
+    } catch (e) {
+        // Fallback to escaped HTML if marked fails
+        return escapeHtml(str);
+    }
+}
+
 // Mapping for chaos type display names
 const CHAOS_TYPE_LABELS = {
+    'none': 'None',
     'user_input': 'User Input',
     'llm': 'LLM Call',
     'stream': 'LLM Streaming',
@@ -380,7 +399,7 @@ function renderScenarioCard(trace) {
 
     // Build tooltip content
     const faults = extractFaults(trace);
-    const chaosItems = faults.length > 0 
+    const chaosItems = faults.length > 0
         ? faults.map(f => f.type + (f.target_tool ? ` (${f.target_tool})` : ''))
         : ['No chaos injected'];
     const passedItems = passedAssertions.length > 0
@@ -395,7 +414,7 @@ function renderScenarioCard(trace) {
     if (!isRunning && assertions.length > 0) {
         const chaosTooltipHtml = `<div class="tooltip"><div class="tooltip-title">Chaos Injected</div>${chaosItems.map(i => `<div class="tooltip-item">${escapeHtml(i)}</div>`).join('')}</div>`;
         const passedTooltipHtml = `<div class="tooltip"><div class="tooltip-title">Passed</div>${passedItems.map(i => `<div class="tooltip-item tooltip-pass">✓ ${escapeHtml(i)}</div>`).join('')}</div>`;
-        
+
         if (failedAssertions.length > 0) {
             const failedTooltipHtml = `<div class="tooltip"><div class="tooltip-title">Failed</div>${failedItems.map(i => `<div class="tooltip-item tooltip-fail">✗ ${escapeHtml(i)}</div>`).join('')}</div>`;
             statsHtml = `<span class="inline-stats"><span class="stat-chaos has-tooltip">⚡${chaosCount}${chaosTooltipHtml}</span><span class="stat-fail has-tooltip">✗${failedAssertions.length}${failedTooltipHtml}</span><span class="stat-pass has-tooltip">✓${passedCount}${passedTooltipHtml}</span></span>`;
@@ -405,7 +424,7 @@ function renderScenarioCard(trace) {
     }
 
     // Build description tooltip for card hover (positioned below to avoid header)
-    const descriptionTooltip = description 
+    const descriptionTooltip = description
         ? `<div class="tooltip tooltip-below"><div class="tooltip-title">Description</div><div class="tooltip-item tooltip-description">${escapeHtml(description)}</div></div>`
         : '';
 
@@ -423,6 +442,86 @@ function renderScenarioCard(trace) {
                     <span class="outcome-time">${elapsedS ? formatDuration(elapsedS) : '—'}</span>
                 </div>
             </div>
+        </div>
+    `;
+}
+
+function renderScenarioListItem(trace) {
+    const report = trace.report || {};
+    const passed = trace.status === 'success' || report.passed;
+    const isRunning = trace.status === 'running';
+
+    let rowClass = 'scenario-list-item';
+    if (isRunning) rowClass += ' running';
+    else if (passed) rowClass += ' passed';
+    else rowClass += ' failed';
+
+    const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
+    const assertions = report.assertion_results || [];
+    const failedAssertions = assertions.filter(a => !a.passed);
+    const passedAssertions = assertions.filter(a => a.passed);
+    const failedCount = failedAssertions.length;
+    const passedCount = passedAssertions.length;
+    const chaosCount = trace.fault_count || 0;
+    const faults = extractFaults(trace);
+    const tools = extractTools(trace);
+    const llmCalls = trace.total_calls || 0;
+    const toolCalls = tools.length;
+    const description = trace.description || '';
+
+    // Get chaos type for compact display
+    let chaosTypeLabel = '—';
+    if (faults.length > 0) {
+        const uniquePoints = new Set(faults.map(f => f.chaos_point || getChaosPointFallback(f.type)));
+        if (uniquePoints.size > 1) {
+            chaosTypeLabel = 'Multi';
+        } else {
+            const point = [...uniquePoints][0] || 'unknown';
+            chaosTypeLabel = getChaosTypeLabel(point.toLowerCase());
+        }
+    }
+
+    // Format timestamp (when the run happened)
+    const runTime = trace.end_time || trace.start_time;
+    const timestamp = runTime ? formatTime(runTime) : '—';
+
+    // Get turn count
+    const turnResults = report.turn_results || [];
+    const turnCount = turnResults.length || 1;
+
+    // Build tooltips
+    const descTooltip = description
+        ? `<div class="tooltip"><div class="tooltip-title">Description</div><div class="tooltip-item tooltip-description">${escapeHtml(description)}</div></div>`
+        : '';
+
+    const chaosTooltip = faults.length > 0
+        ? `<div class="tooltip"><div class="tooltip-title">Chaos Injected</div>${faults.map(f => `<div class="tooltip-item">${escapeHtml(f.type)}${f.target_tool ? ` → ${escapeHtml(f.target_tool)}` : ''}</div>`).join('')}</div>`
+        : '';
+
+    const toolsTooltip = tools.length > 0
+        ? `<div class="tooltip"><div class="tooltip-title">Tool Calls</div>${tools.map(t => `<div class="tooltip-item">${escapeHtml(t.name)}</div>`).join('')}</div>`
+        : '';
+
+    const passTooltip = passedAssertions.length > 0
+        ? `<div class="tooltip"><div class="tooltip-title">Passed</div>${passedAssertions.map(a => `<div class="tooltip-item tooltip-pass">✓ ${escapeHtml(a.name)}</div>`).join('')}</div>`
+        : '';
+
+    const failTooltip = failedAssertions.length > 0
+        ? `<div class="tooltip"><div class="tooltip-title">Failed</div>${failedAssertions.map(a => `<div class="tooltip-item tooltip-fail">✗ ${escapeHtml(a.name)}</div>`).join('')}</div>`
+        : '';
+
+    return `
+        <div class="${rowClass}" data-trace-id="${trace.trace_id}" data-timestamp="${runTime || ''}">
+            <div class="list-name ${description ? 'has-tooltip' : ''}">${escapeHtml(trace.name)}${descTooltip}</div>
+            <div class="list-col list-turns">${turnCount}</div>
+            <div class="list-col list-chaos-type">${chaosTypeLabel}</div>
+            <div class="list-col list-chaos-count ${chaosCount > 0 ? 'has-tooltip' : ''}">${chaosCount > 0 ? `⚡${chaosCount}` : '—'}${chaosTooltip}</div>
+            <div class="list-col list-llm">${llmCalls}</div>
+            <div class="list-col list-tools ${toolCalls > 0 ? 'has-tooltip' : ''}">${toolCalls}${toolsTooltip}</div>
+            <div class="list-col list-pass ${passedCount > 0 ? 'has-tooltip' : ''}">${passedCount > 0 ? `✓${passedCount}` : '—'}${passTooltip}</div>
+            <div class="list-col list-fail ${failedCount > 0 ? 'has-tooltip' : ''}">${failedCount > 0 ? `✗${failedCount}` : '—'}${failTooltip}</div>
+            <div class="list-col list-duration">${elapsedS ? formatDuration(elapsedS) : '—'}</div>
+            <div class="list-col list-timestamp">${timestamp}</div>
         </div>
     `;
 }
@@ -495,6 +594,87 @@ function closeDropdown() {
     trigger.classList.remove('dropdown-open');
 }
 
+// ============================================================
+// View Toggle (Grid/List)
+// ============================================================
+function setViewMode(mode) {
+    state.viewMode = mode;
+    localStorage.setItem('viewMode', mode);
+    updateViewToggleUI();
+    renderScenarios();
+}
+
+function updateViewToggleUI() {
+    document.querySelectorAll('#viewToggle .view-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === state.viewMode);
+    });
+    const grid = document.getElementById('scenariosGrid');
+    grid.classList.toggle('list-view', state.viewMode === 'list');
+}
+
+// ============================================================
+// Sorting
+// ============================================================
+function toggleSort(column) {
+    if (state.sortColumn === column) {
+        // Toggle direction
+        state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortColumn = column;
+        state.sortDirection = 'desc'; // Default to descending for new column
+    }
+    renderScenarios();
+}
+
+function getSortValue(trace, column) {
+    const report = trace.report || {};
+    const assertions = report.assertion_results || [];
+
+    switch (column) {
+        case 'name':
+            return trace.name?.toLowerCase() || '';
+        case 'turns':
+            return (report.turn_results || []).length || 1;
+        case 'type':
+            const faults = extractFaults(trace);
+            if (faults.length === 0) return '';
+            const points = new Set(faults.map(f => f.chaos_point || getChaosPointFallback(f.type)));
+            return [...points][0] || '';
+        case 'chaos':
+            return trace.fault_count || 0;
+        case 'llm':
+            return trace.total_calls || 0;
+        case 'tools':
+            return extractTools(trace).length;
+        case 'pass':
+            return assertions.filter(a => a.passed).length;
+        case 'fail':
+            return assertions.filter(a => !a.passed).length;
+        case 'duration':
+            return report.elapsed_s || report.scorecard?.elapsed_s || 0;
+        case 'timestamp':
+            return trace.end_time || trace.start_time || '';
+        default:
+            return '';
+    }
+}
+
+function sortTraces(traces) {
+    return traces.sort((a, b) => {
+        const valA = getSortValue(a, state.sortColumn);
+        const valB = getSortValue(b, state.sortColumn);
+
+        let comparison = 0;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+        } else {
+            comparison = String(valA).localeCompare(String(valB));
+        }
+
+        return state.sortDirection === 'asc' ? comparison : -comparison;
+    });
+}
+
 function getFilteredTraces() {
     let traces = Object.values(state.traces);
     
@@ -513,20 +693,28 @@ function getFilteredTraces() {
         traces = traces.filter(t => {
             const faults = extractFaults(t);
             const points = faults.map(f => (f.chaos_point || getChaosPointFallback(f.type)).toUpperCase());
-            // Check if any of the selected types match any of the trace's chaos points
-            return state.typeFilter.some(selectedType => 
-                points.includes(selectedType.toUpperCase())
-            );
+
+            // Check if any of the selected types match
+            return state.typeFilter.some(selectedType => {
+                // Special case: "none" matches traces with no chaos
+                if (selectedType === 'none') {
+                    return faults.length === 0;
+                }
+                return points.includes(selectedType.toUpperCase());
+            });
         });
     }
-    
+
     return traces;
 }
 
 function renderScenarios() {
     const grid = document.getElementById('scenariosGrid');
-    const traces = getFilteredTraces();
-    
+    let traces = getFilteredTraces();
+
+    // Apply view mode class
+    grid.classList.toggle('list-view', state.viewMode === 'list');
+
     if (traces.length === 0) {
         const isEmpty = Object.keys(state.traces).length === 0;
         grid.innerHTML = `
@@ -538,18 +726,60 @@ function renderScenarios() {
         `;
         return;
     }
-    
-    traces.sort((a, b) => {
-        const timeA = a.end_time || a.start_time || '';
-        const timeB = b.end_time || b.start_time || '';
-        return timeB.localeCompare(timeA);
-    });
-    
-    grid.innerHTML = traces.map(t => renderScenarioCard(t)).join('');
-    
-    grid.querySelectorAll('.scenario-card').forEach(card => {
-        card.addEventListener('click', () => openScenarioModal(card.dataset.traceId));
-    });
+
+    // Sort traces
+    if (state.viewMode === 'list') {
+        traces = sortTraces(traces);
+    } else {
+        // Grid view: default sort by time descending
+        traces.sort((a, b) => {
+            const timeA = a.end_time || a.start_time || '';
+            const timeB = b.end_time || b.start_time || '';
+            return timeB.localeCompare(timeA);
+        });
+    }
+
+    // Helper for sort indicator
+    const sortIcon = (col) => {
+        if (state.sortColumn !== col) return '<span class="sort-icon">⇅</span>';
+        return state.sortDirection === 'asc'
+            ? '<span class="sort-icon active">↑</span>'
+            : '<span class="sort-icon active">↓</span>';
+    };
+
+    // Render based on view mode
+    if (state.viewMode === 'list') {
+        grid.innerHTML = `
+            <div class="list-header">
+                <div class="list-name sortable" data-sort="name">Scenario ${sortIcon('name')}</div>
+                <div class="list-col list-turns sortable" data-sort="turns">Turns ${sortIcon('turns')}</div>
+                <div class="list-col list-chaos-type sortable" data-sort="type">Type ${sortIcon('type')}</div>
+                <div class="list-col list-chaos-count sortable" data-sort="chaos">Chaos ${sortIcon('chaos')}</div>
+                <div class="list-col list-llm sortable" data-sort="llm">LLM ${sortIcon('llm')}</div>
+                <div class="list-col list-tools sortable" data-sort="tools">Tools ${sortIcon('tools')}</div>
+                <div class="list-col list-pass sortable" data-sort="pass">Pass ${sortIcon('pass')}</div>
+                <div class="list-col list-fail sortable" data-sort="fail">Fail ${sortIcon('fail')}</div>
+                <div class="list-col list-duration sortable" data-sort="duration">Duration ${sortIcon('duration')}</div>
+                <div class="list-col list-timestamp sortable" data-sort="timestamp">Time ${sortIcon('timestamp')}</div>
+            </div>
+            ${traces.map(t => renderScenarioListItem(t)).join('')}
+        `;
+        // Add click handlers for sorting
+        grid.querySelectorAll('.list-header .sortable').forEach(header => {
+            header.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleSort(header.dataset.sort);
+            });
+        });
+        grid.querySelectorAll('.scenario-list-item').forEach(item => {
+            item.addEventListener('click', () => openScenarioModal(item.dataset.traceId));
+        });
+    } else {
+        grid.innerHTML = traces.map(t => renderScenarioCard(t)).join('');
+        grid.querySelectorAll('.scenario-card').forEach(card => {
+            card.addEventListener('click', () => openScenarioModal(card.dataset.traceId));
+        });
+    }
 }
 
 function render() {
@@ -568,11 +798,72 @@ function renderIfChanged() {
 // ============================================================
 // Conversation Timeline Rendering
 // ============================================================
+function renderTurnSeparator(entry) {
+    const turnNum = entry.turn_number || 1;
+    const isStart = entry.type === 'turn_start';
+
+    if (isStart) {
+        const inputType = entry.input_type === 'dynamic' ? '<span class="turn-dynamic">λ dynamic</span>' : '';
+        return `
+            <div class="timeline-row turn-separator turn-start">
+                <div class="time-gutter"></div>
+                <div class="timeline-content">
+                    <div class="turn-header">
+                        <span class="turn-label">TURN ${turnNum}</span>
+                        ${inputType}
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        // turn_end
+        const status = entry.success ? '✓' : '✗';
+        const statusClass = entry.success ? 'success' : 'failed';
+        const duration = entry.duration_s ? formatDuration(entry.duration_s) : '';
+        const llmCalls = entry.llm_calls ? `${entry.llm_calls} LLM` : '';
+
+        return `
+            <div class="timeline-row turn-separator turn-end">
+                <div class="time-gutter"></div>
+                <div class="timeline-content">
+                    <div class="turn-footer ${statusClass}">
+                        <span class="turn-status">${status}</span>
+                        <span class="turn-stats">${duration}${llmCalls ? ' · ' + llmCalls : ''}</span>
+                        ${entry.error ? `<span class="turn-error">${escapeHtml(entry.error)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
 function renderConversationEntry(entry, index) {
     const timestamp = formatTimestamp(entry.timestamp_ms);
-    
+
     switch (entry.type) {
+        case 'turn_start':
+        case 'turn_end':
+            return renderTurnSeparator(entry);
+
+        case 'between_turn_chaos':
+            return `
+                <div class="timeline-row between-turns-chaos">
+                    <div class="time-gutter"></div>
+                    <div class="timeline-content">
+                        <div class="between-turns-banner">
+                            <div class="between-turns-header">
+                                <span class="chaos-icon">⚡</span>
+                                <span>BETWEEN TURNS ${entry.after_turn} → ${entry.before_turn}</span>
+                            </div>
+                            <div class="chaos-type">${escapeHtml(entry.chaos_type || 'history_mutate')}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
         case 'user':
+            const dynamicBadge = entry.is_dynamic ? '<span class="dynamic-badge">λ</span>' : '';
+            const turnLabel = entry.turn_number ? `<span class="turn-indicator">T${entry.turn_number}</span>` : '';
             return `
                 <div class="timeline-row user">
                     <div class="time-gutter">
@@ -580,7 +871,7 @@ function renderConversationEntry(entry, index) {
                     </div>
                     <div class="timeline-content">
                         <div class="message-bubble">
-                            <div class="message-label">USER</div>
+                            <div class="message-label">USER ${dynamicBadge}${turnLabel}</div>
                             <div class="message-text">${escapeHtml(entry.content)}</div>
                         </div>
                     </div>
@@ -596,7 +887,7 @@ function renderConversationEntry(entry, index) {
                     <div class="timeline-content">
                         <div class="message-bubble">
                             <div class="message-label">ASSISTANT</div>
-                            <div class="message-text">${escapeHtml(entry.content)}</div>
+                            <div class="message-text markdown-content">${renderMarkdown(entry.content)}</div>
                         </div>
                     </div>
                 </div>
@@ -741,7 +1032,9 @@ function renderConversationEntry(entry, index) {
 
 function renderConversationTimeline(trace) {
     const conversation = buildConversation(trace);
-    
+    const report = trace.report || {};
+    const turnResults = report.turn_results || [];
+
     if (conversation.length === 0) {
         return `
             <div class="empty-state">
@@ -751,69 +1044,297 @@ function renderConversationTimeline(trace) {
             </div>
         `;
     }
-    
+
+    // Render turn-based timeline
+    return renderMultiTurnTimeline(conversation, turnResults);
+}
+
+function renderMultiTurnTimeline(conversation, turnResults) {
+    // If no turn results yet (e.g., live streaming), show flat timeline
+    if (!turnResults || turnResults.length === 0) {
+        return `
+            <div class="conversation-timeline">
+                ${conversation.map((entry, i) => renderConversationEntry(entry, i)).join('')}
+            </div>
+        `;
+    }
+
+    // Group conversation entries by turn_number
+    const turnGroups = {};
+    const betweenTurnsChaos = []; // Chaos that happens between turns
+
+    conversation.forEach(entry => {
+        const turnNum = entry.turn_number || 0;
+
+        // Handle between_turn_chaos specially
+        if (entry.type === 'between_turn_chaos') {
+            betweenTurnsChaos.push(entry);
+            return;
+        }
+
+        // Skip turn_start and turn_end markers - we render our own headers
+        if (entry.type === 'turn_start' || entry.type === 'turn_end') {
+            return;
+        }
+
+        if (!turnGroups[turnNum]) turnGroups[turnNum] = [];
+        turnGroups[turnNum].push(entry);
+    });
+
+    let html = '<div class="turns-container">';
+
+    turnResults.forEach((turnResult, index) => {
+        const turnNum = turnResult.turn_number;
+        const entries = turnGroups[turnNum] || [];
+        const hasChaos = entries.some(e => e.type === 'chaos') || (turnResult.chaos && turnResult.chaos.length > 0);
+        const turnAssertions = turnResult.assertion_results || [];
+        const turnChaos = turnResult.chaos || [];
+
+        // Check for between-turns chaos before this turn
+        const betweenChaos = betweenTurnsChaos.filter(c =>
+            c.after_turn === turnNum - 1 && c.before_turn === turnNum
+        );
+
+        // Render between-turns chaos if any
+        if (betweenChaos.length > 0 && index > 0) {
+            html += `
+                <div class="between-turns">
+                    ${betweenChaos.map(c => `
+                        <div class="between-turns-banner">
+                            <span class="between-turns-label">Between Turns</span>
+                            <span class="between-turns-chaos">
+                                <span>⚡</span>
+                                <span>${escapeHtml(c.chaos_type || 'context_mutate')}${c.chaos_fn_name ? ` · ${c.chaos_fn_name}` : ''}</span>
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Count tool calls for this turn
+        const toolCalls = entries.filter(e => e.type === 'tool_call').length;
+
+        // Build header stats
+        const chaosCount = turnChaos.length;
+        const passedCount = turnAssertions.filter(a => a.passed).length;
+        const failedCount = turnAssertions.filter(a => !a.passed).length;
+
+        // Render the turn section
+        html += `
+            <div class="turn" data-turn="${turnNum}">
+                <div class="turn-header" onclick="toggleTurn(this)">
+                    <div class="turn-label">
+                        TURN ${turnNum}
+                        <span class="turn-status ${turnResult.success ? 'success' : 'error'}">${turnResult.success ? '✓' : '✗'}</span>
+                        ${chaosCount > 0 ? `<span class="turn-chaos-count">⚡${chaosCount}</span>` : ''}
+                        ${passedCount > 0 ? `<span class="turn-pass-count">✓${passedCount}</span>` : ''}
+                        ${failedCount > 0 ? `<span class="turn-fail-count">✗${failedCount}</span>` : ''}
+                        ${turnResult.is_dynamic ? '<span class="dynamic-indicator">λ</span>' : ''}
+                    </div>
+                    <div class="turn-stats">
+                        <span>${turnResult.llm_calls || 0} LLM</span>
+                        <span>${toolCalls} tools</span>
+                        <span>${formatDuration(turnResult.duration_s)}</span>
+                        <span class="turn-chevron">▼</span>
+                    </div>
+                </div>
+                <div class="turn-content">
+                    <div class="conversation-timeline">
+                        ${entries.map((entry, i) => renderConversationEntry(entry, i)).join('')}
+                    </div>
+                    ${turnResult.error ? `<div class="turn-error-banner">${escapeHtml(turnResult.error)}</div>` : ''}
+                    ${renderTurnFooter(turnChaos, turnAssertions)}
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    return html;
+}
+
+/**
+ * Build tooltip HTML for a chaos item.
+ */
+function buildChaosTooltip(c) {
+    const rows = [];
+
+    if (c.chaos_type) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Type:</span> <span class="tip-value">${escapeHtml(c.chaos_type)}</span></div>`);
+    }
+    if (c.target_tool) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Target:</span> <span class="tip-value mono">${escapeHtml(c.target_tool)}</span></div>`);
+    }
+    if (c.message) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Message:</span> <span class="tip-value">${escapeHtml(c.message)}</span></div>`);
+    }
+    if (c.chaos_fn_name) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Function:</span> <span class="tip-value mono">${escapeHtml(c.chaos_fn_name)}</span></div>`);
+    }
+    if (c.chaos_fn_doc) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Doc:</span> <span class="tip-value italic">${escapeHtml(c.chaos_fn_doc)}</span></div>`);
+    }
+    if (c.on_turn != null) {
+        rows.push(`<div class="tip-row"><span class="tip-label">On Turn:</span> <span class="tip-value">${c.on_turn}</span></div>`);
+    }
+    if (c.after_calls != null) {
+        rows.push(`<div class="tip-row"><span class="tip-label">After Calls:</span> <span class="tip-value">${c.after_calls}</span></div>`);
+    }
+
+    if (rows.length === 0) return '';
+
     return `
-        <div class="conversation-timeline">
-            ${conversation.map((entry, i) => renderConversationEntry(entry, i)).join('')}
+        <div class="panel-tooltip">
+            <div class="tip-header">Chaos Details</div>
+            ${rows.join('')}
         </div>
     `;
 }
 
+/**
+ * Build tooltip HTML for an assertion item.
+ */
+function buildAssertionTooltip(a) {
+    const rows = [];
+
+    rows.push(`<div class="tip-row"><span class="tip-label">Name:</span> <span class="tip-value">${escapeHtml(a.name)}</span></div>`);
+    rows.push(`<div class="tip-row"><span class="tip-label">Status:</span> <span class="tip-value ${a.passed ? 'tip-pass' : 'tip-fail'}">${a.passed ? 'PASSED' : 'FAILED'}</span></div>`);
+
+    if (a.measured != null) {
+        const measuredStr = typeof a.measured === 'number' ? a.measured.toFixed(4) : String(a.measured);
+        rows.push(`<div class="tip-row"><span class="tip-label">Measured:</span> <span class="tip-value mono">${escapeHtml(measuredStr)}</span></div>`);
+    }
+    if (a.expected != null) {
+        rows.push(`<div class="tip-row"><span class="tip-label">Expected:</span> <span class="tip-value mono">${escapeHtml(String(a.expected))}</span></div>`);
+    }
+    if (a.message) {
+        rows.push(`<div class="tip-row tip-message"><span class="tip-label">Message:</span> <span class="tip-value">${escapeHtml(a.message)}</span></div>`);
+    }
+
+    return `
+        <div class="panel-tooltip">
+            <div class="tip-header">Assertion Details</div>
+            ${rows.join('')}
+        </div>
+    `;
+}
+
+/**
+ * Shared renderer for chaos/assertions panels.
+ * Used by both turn-level footers and scenario-level panels.
+ *
+ * @param {Array} chaos - Array of chaos config objects
+ * @param {Array} assertions - Array of assertion result objects
+ * @param {Object} options - Rendering options
+ * @param {string} options.scope - 'turn' or 'scenario' (affects labels and styling)
+ * @param {string} options.wrapperClass - Additional CSS class for the wrapper
+ */
+function renderChaosAssertionsPanel(chaos, assertions, options = {}) {
+    const scope = options.scope || 'turn';
+    const wrapperClass = options.wrapperClass || '';
+    const labelPrefix = scope === 'turn' ? 'Turn ' : 'Scenario ';
+
+    const chaosCount = (chaos || []).length;
+    const passedCount = (assertions || []).filter(a => a.passed).length;
+    const failedCount = (assertions || []).filter(a => !a.passed).length;
+
+    const chaosItemsHtml = chaosCount > 0
+        ? (chaos || []).map(c => {
+            const turnInfo = scope === 'scenario' && c.on_turn ? ` (turn ${c.on_turn})` : '';
+            const allTurns = scope === 'scenario' && !c.on_turn ? ' (all turns)' : '';
+            const tooltip = buildChaosTooltip(c);
+            return `
+                <div class="panel-item chaos-item has-panel-tooltip">
+                    <span class="item-icon chaos-icon">⚡</span>
+                    <span class="item-name">${escapeHtml(c.chaos_type || 'chaos')}</span>
+                    ${c.target_tool ? `<span class="item-target">→ ${escapeHtml(c.target_tool)}</span>` : ''}
+                    <span class="item-scope">${turnInfo}${allTurns}</span>
+                    ${c.chaos_fn_doc ? `<div class="item-doc">"${escapeHtml(truncateText(c.chaos_fn_doc, 60))}"</div>` : ''}
+                    ${tooltip}
+                </div>
+            `;
+        }).join('')
+        : `<div class="panel-empty">No chaos</div>`;
+
+    const assertionItemsHtml = (assertions || []).length > 0
+        ? (assertions || []).map(a => {
+            const tooltip = buildAssertionTooltip(a);
+            return `
+                <div class="panel-item assertion-item ${a.passed ? 'passed' : 'failed'} has-panel-tooltip">
+                    <span class="item-icon">${a.passed ? '✓' : '✗'}</span>
+                    <span class="item-name">${escapeHtml(a.name)}</span>
+                    ${a.measured != null ? `<span class="item-score">(${typeof a.measured === 'number' ? a.measured.toFixed(2) : a.measured})</span>` : ''}
+                    ${a.message ? `<div class="item-message">${escapeHtml(truncateText(a.message, 60))}</div>` : ''}
+                    ${tooltip}
+                </div>
+            `;
+        }).join('')
+        : `<div class="panel-empty">No assertions</div>`;
+
+    return `
+        <div class="chaos-assertions-panel ${wrapperClass}" data-scope="${scope}">
+            <div class="panel-col chaos-col">
+                <div class="panel-header">
+                    <span class="panel-label">${labelPrefix}Chaos</span>
+                    <span class="panel-count ${chaosCount > 0 ? 'has-items' : ''}">${chaosCount}</span>
+                </div>
+                <div class="panel-items">${chaosItemsHtml}</div>
+            </div>
+            <div class="panel-col assertions-col">
+                <div class="panel-header">
+                    <span class="panel-label">${labelPrefix}Assertions</span>
+                    <span class="panel-count">${failedCount > 0 ? `<span class="count-fail">${failedCount}✗</span> <span class="count-pass">${passedCount}✓</span>` : `<span class="count-pass">${passedCount}✓</span>`}</span>
+                </div>
+                <div class="panel-items">${assertionItemsHtml}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderTurnFooter(chaos, assertions) {
+    // Only render footer if there's chaos or assertions
+    if ((!chaos || chaos.length === 0) && (!assertions || assertions.length === 0)) {
+        return '';
+    }
+
+    return renderChaosAssertionsPanel(chaos, assertions, {
+        scope: 'turn',
+        wrapperClass: 'turn-footer'
+    });
+}
+
+function toggleTurn(header) {
+    const turn = header.parentElement;
+    turn.classList.toggle('collapsed');
+}
+
 function renderSummarySections(trace) {
     const report = trace.report || {};
-    const assertions = report.assertion_results || [];
-    const faults = extractFaults(trace);
-    const passedCount = assertions.filter(a => a.passed).length;
-    const failedCount = assertions.filter(a => !a.passed).length;
-    
-    let html = '<div class="summary-sections">';
-    
-    // Chaos section first (what was injected)
-    html += `
-        <div class="summary-section">
-            <div class="section-header-row">
-                <span class="section-label">Chaos</span>
-                <span class="section-count ${faults.length > 0 ? 'has-chaos' : ''}">${faults.length}</span>
-            </div>
-            ${faults.length > 0 ? `
-                <div class="section-items">
-                    ${faults.map(f => {
-                        const point = f.chaos_point || getChaosPointFallback(f.type);
-                        const pointLower = point.toLowerCase();
-                        return `
-                        <div class="section-item chaos-item">
-                            <span class="chaos-category-tag ${pointLower}">${getChaosTypeLabel(pointLower)}</span>
-                            <span class="item-text">${escapeHtml(f.type)}${f.target_tool ? ` → ${escapeHtml(f.target_tool)}` : ''}</span>
-                        </div>
-                    `;}).join('')}
-                </div>
-            ` : '<div class="section-empty">No chaos injected</div>'}
+    const scorecard = report.scorecard || {};
+
+    // Scenario-level assertions (turn-level are now in turn_results)
+    const scenarioAssertions = report.assertion_results || [];
+
+    // Scenario-level chaos config from scorecard
+    const scenarioChaos = scorecard.scenario_chaos || [];
+
+    // Check if there's any scenario-level content to show
+    const hasScenarioContent = scenarioChaos.length > 0 || scenarioAssertions.length > 0;
+
+    if (!hasScenarioContent) {
+        return ''; // Don't render empty scenario section
+    }
+
+    return `
+        <div class="scenario-panel-wrapper">
+            <div class="scenario-panel-header">SCENARIO</div>
+            ${renderChaosAssertionsPanel(scenarioChaos, scenarioAssertions, {
+                scope: 'scenario',
+                wrapperClass: 'scenario-panel'
+            })}
         </div>
     `;
-    
-    // Assertions section (verification)
-    html += `
-        <div class="summary-section">
-            <div class="section-header-row">
-                <span class="section-label">Assertions</span>
-                <span class="section-count">${failedCount > 0 ? `<span class="count-fail">${failedCount}✗</span> <span class="count-pass">${passedCount}✓</span>` : `<span class="count-pass">${passedCount}✓</span>`}</span>
-            </div>
-            ${assertions.length > 0 ? `
-                <div class="section-items">
-                    ${assertions.map(a => `
-                        <div class="section-item assertion-item ${a.passed ? 'passed' : 'failed'}">
-                            <span class="item-icon">${a.passed ? '✓' : '✗'}</span>
-                            <span class="item-name">${escapeHtml(a.name)}</span>
-                            ${a.message ? `<span class="item-detail"><span class="detail-text">${escapeHtml(a.message)}</span><span class="detail-full">${escapeHtml(a.message)}</span></span>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            ` : '<div class="section-empty">No assertions defined</div>'}
-        </div>
-    `;
-    
-    html += '</div>';
-    return html;
 }
 
 // ============================================================
@@ -968,9 +1489,15 @@ function connect() {
 // ============================================================
 function init() {
     initTheme();
-    
+
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-    
+
+    // View toggle (grid/list)
+    document.querySelectorAll('#viewToggle .view-btn').forEach(btn => {
+        btn.addEventListener('click', () => setViewMode(btn.dataset.view));
+    });
+    updateViewToggleUI();
+
     // Pass/fail filter tabs
     document.querySelectorAll('#filterTabs .filter-tab').forEach(tab => {
         tab.addEventListener('click', () => applyFilter(tab.dataset.filter));
@@ -1053,7 +1580,81 @@ document.addEventListener('mouseover', (e) => {
             fullEl.style.left = `${Math.max(10, rect.left - 100)}px`;
         }
     }
+
+    // Position list view tooltips
+    const hasTooltip = e.target.closest('.scenario-list-item .has-tooltip');
+    if (hasTooltip) {
+        const tooltip = hasTooltip.querySelector('.tooltip');
+        if (tooltip) {
+            const rect = hasTooltip.getBoundingClientRect();
+            // Position above the element
+            tooltip.style.bottom = 'auto';
+            tooltip.style.top = `${rect.top - 8}px`;
+            tooltip.style.transform = 'translateY(-100%)';
+            // Keep within screen bounds horizontally
+            tooltip.style.left = `${Math.max(12, rect.left)}px`;
+        }
+    }
 });
+
+// ============================================================
+// Panel Tooltip Positioning
+// ============================================================
+function positionPanelTooltip(item, tooltip) {
+    const itemRect = item.getBoundingClientRect();
+    const tooltipHeight = tooltip.offsetHeight || 150; // estimate if not yet visible
+    const padding = 12;
+
+    // Check space above and below
+    const spaceAbove = itemRect.top;
+    const spaceBelow = window.innerHeight - itemRect.bottom;
+
+    // Reset classes
+    tooltip.classList.remove('above', 'below');
+
+    if (spaceAbove >= tooltipHeight + padding) {
+        // Position above
+        tooltip.style.top = `${itemRect.top - tooltipHeight - 8}px`;
+        tooltip.classList.add('above');
+    } else if (spaceBelow >= tooltipHeight + padding) {
+        // Position below
+        tooltip.style.top = `${itemRect.bottom + 8}px`;
+        tooltip.classList.add('below');
+    } else {
+        // Default to above, will scroll if needed
+        tooltip.style.top = `${Math.max(padding, itemRect.top - tooltipHeight - 8)}px`;
+        tooltip.classList.add('above');
+    }
+
+    // Horizontal positioning - align to left of item, but keep in viewport
+    let left = itemRect.left;
+    const tooltipWidth = tooltip.offsetWidth || 280;
+    if (left + tooltipWidth > window.innerWidth - padding) {
+        left = window.innerWidth - tooltipWidth - padding;
+    }
+    tooltip.style.left = `${Math.max(padding, left)}px`;
+}
+
+document.addEventListener('mouseenter', (e) => {
+    const item = e.target.closest('.has-panel-tooltip');
+    if (item) {
+        const tooltip = item.querySelector('.panel-tooltip');
+        if (tooltip) {
+            positionPanelTooltip(item, tooltip);
+            tooltip.classList.add('visible');
+        }
+    }
+}, true);
+
+document.addEventListener('mouseleave', (e) => {
+    const item = e.target.closest('.has-panel-tooltip');
+    if (item) {
+        const tooltip = item.querySelector('.panel-tooltip');
+        if (tooltip) {
+            tooltip.classList.remove('visible');
+        }
+    }
+}, true);
 
 document.addEventListener('DOMContentLoaded', init);
 

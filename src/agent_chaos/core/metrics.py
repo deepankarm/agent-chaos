@@ -41,6 +41,7 @@ class MetricsStore:
     conversation: list[dict[str, Any]] = field(default_factory=list)
     _start_time: float = field(default_factory=time.monotonic)
     _user_message_recorded: bool = False
+    _current_turn: int = 0  # Current turn number (0 = no turn)
 
     def set_event_bus(self, event_bus: EventBus):
         """Set the event bus for real-time UI updates."""
@@ -59,6 +60,10 @@ class MetricsStore:
         """Get elapsed time since start in milliseconds."""
         return (time.monotonic() - self._start_time) * 1000
 
+    def set_current_turn(self, turn_number: int) -> None:
+        """Set the current turn number for conversation tracking."""
+        self._current_turn = turn_number
+
     def add_conversation_entry(
         self,
         entry_type: str,
@@ -73,6 +78,11 @@ class MetricsStore:
             "type": entry_type,
             "timestamp_ms": self._elapsed_ms(),
         }
+
+        # Auto-add turn_number for relevant entry types if we're in a turn
+        if self._current_turn > 0 and entry_type in ("chaos", "tool_call", "tool_result"):
+            entry["turn_number"] = self._current_turn
+
         entry.update(kwargs)
         self.conversation.append(entry)
 

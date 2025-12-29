@@ -37,6 +37,23 @@
             <div class="section-header">
                 <h2 class="section-title">Scenarios <span class="section-count" id="scenarioCount">0</span></h2>
                 <div class="filter-groups">
+                    <div class="view-toggle" id="viewToggle">
+                        <button class="view-btn active" data-view="grid" title="Grid view">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="1" y="1" width="6" height="6" rx="1"/>
+                                <rect x="9" y="1" width="6" height="6" rx="1"/>
+                                <rect x="1" y="9" width="6" height="6" rx="1"/>
+                                <rect x="9" y="9" width="6" height="6" rx="1"/>
+                            </svg>
+                        </button>
+                        <button class="view-btn" data-view="list" title="List view">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="1" y="2" width="14" height="2" rx="0.5"/>
+                                <rect x="1" y="7" width="14" height="2" rx="0.5"/>
+                                <rect x="1" y="12" width="14" height="2" rx="0.5"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="filter-tabs" id="filterTabs">
                         <button class="filter-tab active" data-filter="all">All</button>
                         <button class="filter-tab" data-filter="passed">Passed</button>
@@ -51,6 +68,10 @@
                         <div class="chaos-type-dropdown" id="chaosTypeDropdown">
                             <div class="dropdown-header">Filter by chaos type</div>
                             <div class="dropdown-options">
+                                <label class="dropdown-option">
+                                    <input type="checkbox" value="none" data-type="none">
+                                    <span>None (Baseline)</span>
+                                </label>
                                 <label class="dropdown-option">
                                     <input type="checkbox" value="user_input" data-type="user_input">
                                     <span>User Input</span>
@@ -107,6 +128,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="/static/app.v4.js?v=4.0"></script>
 </body>
 </html>
