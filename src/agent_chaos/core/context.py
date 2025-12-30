@@ -211,12 +211,7 @@ def chaos_context(
     injector.set_context(ctx)
 
     try:
-        if "anthropic" in providers:
-            patcher._patch_anthropic()
-        if "openai" in providers:
-            patcher._patch_openai()
-        if "gemini" in providers:
-            patcher._patch_gemini()
+        patcher.patch_providers(providers)
         yield ctx
     finally:
         patcher.unpatch_all()

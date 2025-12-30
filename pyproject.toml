@@ -8,11 +8,20 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=0.75.0",
     "httpx>=0.27",
     "fastapi>=0.115",
     "uvicorn>=0.32",
     "websockets>=14.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.75.0"]
+openai = ["openai>=1.0.0"]
+gemini = ["google-genai>=1.40.0"]
+all = [
+    "agent-chaos[anthropic]",
+    "agent-chaos[openai]",
+    "agent-chaos[gemini]",
 ]
 
 [project.scripts]
