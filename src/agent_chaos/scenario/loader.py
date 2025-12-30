@@ -81,8 +81,9 @@ def load_target(ref: str) -> list[Scenario]:
         mod_name, attr = ref.split(":", 1)
         module = importlib.import_module(mod_name)
         scenarios = _coerce_scenarios(getattr(module, attr))
-        for s in scenarios:
+        for i, s in enumerate(scenarios):
             s._source_ref = ref
+            s._source_index = i
         return scenarios
 
     path = Path(ref)
@@ -107,30 +108,31 @@ def load_target(ref: str) -> list[Scenario]:
             f"{ref} must define `scenario`, `get_scenario()`, `scenarios`, or `get_scenarios()`"
         )
 
-    for s in scenarios:
+    for i, s in enumerate(scenarios):
         s._source_ref = ref
+        s._source_index = i
     return scenarios
 
 
-def load_scenario_by_name(ref: str, name: str) -> Scenario:
-    """Load a specific scenario by name from a ref.
+def load_scenario_by_index(ref: str, index: int) -> Scenario:
+    """Load a specific scenario by index from a ref.
 
     Args:
         ref: Source ref (file path or module:attr).
-        name: Scenario name to find.
+        index: Index of the scenario in the source's list.
 
     Returns:
         The matching Scenario.
 
     Raises:
-        ValueError: If no scenario with that name is found.
+        IndexError: If index is out of range.
     """
     scenarios = load_target(ref)
-    for s in scenarios:
-        if s.name == name:
-            return s
-    available = [s.name for s in scenarios]
-    raise ValueError(f"No scenario named '{name}' in {ref}. Available: {available}")
+    if index < 0 or index >= len(scenarios):
+        raise IndexError(
+            f"Scenario index {index} out of range for {ref} (has {len(scenarios)} scenarios)"
+        )
+    return scenarios[index]
 
 
 def load_scenario(ref: str) -> Scenario:

@@ -44,26 +44,28 @@ def _suppress_event_loop_closed_errors() -> None:
     logging.getLogger("asyncio").addFilter(EventLoopClosedFilter())
 
 
-def _run_scenario_worker(args: tuple[str, str, str, int | None, bool]) -> dict[str, Any]:
+def _run_scenario_worker(
+    args: tuple[str, int, str, str, int | None, bool],
+) -> dict[str, Any]:
     """Worker function for parallel scenario execution.
 
     Runs in a subprocess. Loads scenario fresh and executes it.
 
     Args:
-        args: Tuple of (source_ref, scenario_name, artifacts_dir, seed, record_events)
+        args: Tuple of (source_ref, source_index, scenario_name, artifacts_dir, seed, record_events)
 
     Returns:
         Dict with scenario results (serializable subset of RunReport).
     """
-    source_ref, scenario_name, artifacts_dir, seed, record_events = args
+    source_ref, source_index, scenario_name, artifacts_dir, seed, record_events = args
 
     # Suppress asyncio errors in worker too
     _suppress_event_loop_closed_errors()
 
-    from agent_chaos.scenario.loader import load_scenario_by_name
+    from agent_chaos.scenario.loader import load_scenario_by_index
     from agent_chaos.scenario.runner import run_scenario
 
-    scenario = load_scenario_by_name(source_ref, scenario_name)
+    scenario = load_scenario_by_index(source_ref, source_index)
     report = run_scenario(
         scenario,
         artifacts_dir=Path(artifacts_dir),
@@ -219,6 +221,7 @@ def main() -> None:
         work_items = [
             (
                 getattr(s, "_source_ref", "unknown"),
+                getattr(s, "_source_index", 0),
                 s.name,
                 str(artifacts_dir),
                 args.seed,
@@ -230,9 +233,9 @@ def main() -> None:
         with ProcessPoolExecutor(max_workers=workers) as executor:
             future_to_name = {}
             for item in work_items:
-                logger.info(f"⏳ STARTING {item[1]}")
+                logger.info(f"⏳ STARTING {item[2]}")
                 future = executor.submit(_run_scenario_worker, item)
-                future_to_name[future] = item[1]
+                future_to_name[future] = item[2]
 
             for future in as_completed(future_to_name):
                 scenario_name = future_to_name[future]

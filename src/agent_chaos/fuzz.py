@@ -451,22 +451,24 @@ def fuzz_chaos(
         # Build each chaos to get proper string representation
         chaos_descriptions = [str(c.build()) for c in chaos_list]
 
+        # Build readable multiline description
+        chaos_bullets = "\n".join(f"  • {c}" for c in chaos_descriptions)
+        description = (
+            f"Fuzzed variation {i} of {scenario.name}\n"
+            f"Seed: {seed}\n"
+            f"Chaos:\n{chaos_bullets}"
+        )
+
         # Create the fuzzed scenario
         fuzzed = ScenarioClass(
             name=f"{scenario.name}--fuzz-{i}",
-            description=f"Fuzzed variation {i} of {scenario.name}",
+            description=description,
             agent=scenario.agent,
             turns=deepcopy(scenario.turns),  # Deep copy to avoid mutation
             chaos=list(scenario.chaos) + chaos_list,  # Base chaos + fuzzed chaos
             providers=scenario.providers,
             assertions=list(scenario.assertions),
             tags=list(scenario.tags) + [tag],
-        )
-
-        # Store fuzz metadata in description
-        fuzzed.description = (
-            f"Fuzzed variation {i} of {scenario.name}. "
-            f"Seed: {seed}, Chaos: {chaos_descriptions}"
         )
 
         scenarios.append(fuzzed)
