@@ -115,7 +115,7 @@ class Scenario:
         chaos: Scenario-level chaos to inject (applies across all turns).
         providers: Providers to patch. Defaults to ["anthropic"].
         assertions: Scenario-level assertions to validate contracts.
-        meta: Optional metadata for CI/reporting (model, commit SHA, etc.)
+        tags: Optional list of tags for UI grouping and filtering.
 
     Example:
         from agent_chaos import llm_rate_limit, tool_error
@@ -147,4 +147,4 @@ class Scenario:
     chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
     providers: list[str] = field(default_factory=lambda: ["anthropic"])
     assertions: list[Any] = field(default_factory=list)
-    meta: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)

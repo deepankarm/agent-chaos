@@ -18,6 +18,8 @@ const state = {
     viewMode: localStorage.getItem('viewMode') || 'grid', // 'grid' or 'list'
     sortColumn: 'timestamp', // default sort by time
     sortDirection: 'desc', // 'asc' or 'desc'
+    groupByTags: localStorage.getItem('groupByTags') === 'true', // Group scenarios by tags
+    collapsedGroups: new Set(), // Track collapsed tag groups
 };
 
 // ============================================================
@@ -417,7 +419,7 @@ function renderScenarioCard(trace) {
 
         if (failedAssertions.length > 0) {
             const failedTooltipHtml = `<div class="tooltip"><div class="tooltip-title">Failed</div>${failedItems.map(i => `<div class="tooltip-item tooltip-fail">✗ ${escapeHtml(i)}</div>`).join('')}</div>`;
-            statsHtml = `<span class="inline-stats"><span class="stat-chaos has-tooltip">⚡${chaosCount}${chaosTooltipHtml}</span><span class="stat-fail has-tooltip">✗${failedAssertions.length}${failedTooltipHtml}</span><span class="stat-pass has-tooltip">✓${passedCount}${passedTooltipHtml}</span></span>`;
+            statsHtml = `<span class="inline-stats"><span class="stat-chaos has-tooltip">⚡${chaosCount}${chaosTooltipHtml}</span><span class="stat-pass has-tooltip">✓${passedCount}${passedTooltipHtml}</span><span class="stat-fail has-tooltip">✗${failedAssertions.length}${failedTooltipHtml}</span></span>`;
         } else {
             statsHtml = `<span class="inline-stats"><span class="stat-chaos has-tooltip">⚡${chaosCount}${chaosTooltipHtml}</span><span class="stat-pass has-tooltip">✓${assertions.length}${passedTooltipHtml}</span></span>`;
         }
@@ -613,6 +615,95 @@ function updateViewToggleUI() {
 }
 
 // ============================================================
+// Tag Grouping
+// ============================================================
+function getTraceTag(trace) {
+    // Extract primary tag from trace report (first tag only)
+    const report = trace.report || {};
+    const tags = report.tags || [];
+    return tags.length > 0 ? tags[0] : 'untagged';
+}
+
+function groupTracesByTag(traces) {
+    // Group traces by their primary tag (first tag only - each trace appears once)
+    const groups = {};
+    traces.forEach(t => {
+        const tag = getTraceTag(t);
+        if (!groups[tag]) groups[tag] = [];
+        groups[tag].push(t);
+    });
+    return groups;
+}
+
+function toggleGroupByTags() {
+    state.groupByTags = !state.groupByTags;
+    localStorage.setItem('groupByTags', state.groupByTags);
+    updateGroupByTagsUI();
+    renderScenarios();
+}
+
+function updateGroupByTagsUI() {
+    const btn = document.getElementById('groupByTagsBtn');
+    if (btn) {
+        btn.classList.toggle('active', state.groupByTags);
+    }
+}
+
+function toggleTagGroup(tag) {
+    if (state.collapsedGroups.has(tag)) {
+        state.collapsedGroups.delete(tag);
+    } else {
+        state.collapsedGroups.add(tag);
+    }
+    renderScenarios();
+}
+
+function renderTagGroup(tag, traces) {
+    const isCollapsed = state.collapsedGroups.has(tag);
+
+    // Aggregate stats across all scenarios in this group
+    let totalChaos = 0;
+    let totalAssertionsPassed = 0;
+    let totalAssertionsFailed = 0;
+
+    traces.forEach(t => {
+        totalChaos += t.fault_count || 0;
+        const assertions = t.report?.assertion_results || [];
+        assertions.forEach(a => {
+            if (a.passed) totalAssertionsPassed++;
+            else totalAssertionsFailed++;
+        });
+    });
+
+    let scenariosHtml;
+    if (state.viewMode === 'list') {
+        scenariosHtml = traces.map(t => renderScenarioListItem(t)).join('');
+    } else {
+        scenariosHtml = traces.map(t => renderScenarioCard(t)).join('');
+    }
+
+    return `
+        <div class="tag-group ${isCollapsed ? 'collapsed' : ''}" data-tag="${escapeHtml(tag)}">
+            <div class="tag-group-header" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                <div class="tag-group-info">
+                    <span class="tag-group-chevron">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="tag-group-name">${escapeHtml(tag)}</span>
+                    <span class="tag-group-count">${traces.length}</span>
+                </div>
+                <div class="tag-group-stats">
+                    ${totalChaos > 0 ? `<span class="tag-stat chaos">⚡${totalChaos}</span>` : ''}
+                    ${totalAssertionsPassed > 0 ? `<span class="tag-stat pass">✓${totalAssertionsPassed}</span>` : ''}
+                    ${totalAssertionsFailed > 0 ? `<span class="tag-stat fail">✗${totalAssertionsFailed}</span>` : ''}
+                </div>
+            </div>
+            <div class="tag-group-content ${state.viewMode === 'list' ? 'list-content' : 'grid-content'}">
+                ${scenariosHtml}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
 // Sorting
 // ============================================================
 function toggleSort(column) {
@@ -714,6 +805,7 @@ function renderScenarios() {
 
     // Apply view mode class
     grid.classList.toggle('list-view', state.viewMode === 'list');
+    grid.classList.toggle('grouped-view', state.groupByTags);
 
     if (traces.length === 0) {
         const isEmpty = Object.keys(state.traces).length === 0;
@@ -747,7 +839,24 @@ function renderScenarios() {
             : '<span class="sort-icon active">↓</span>';
     };
 
-    // Render based on view mode
+    // Render grouped by tags if enabled
+    if (state.groupByTags) {
+        const groups = groupTracesByTag(traces);
+        const tags = Object.keys(groups).sort();
+
+        grid.innerHTML = tags.map(tag => renderTagGroup(tag, groups[tag])).join('');
+
+        // Add click handlers for scenario cards/items within groups
+        grid.querySelectorAll('.scenario-card').forEach(card => {
+            card.addEventListener('click', () => openScenarioModal(card.dataset.traceId));
+        });
+        grid.querySelectorAll('.scenario-list-item').forEach(item => {
+            item.addEventListener('click', () => openScenarioModal(item.dataset.traceId));
+        });
+        return;
+    }
+
+    // Render based on view mode (flat, non-grouped)
     if (state.viewMode === 'list') {
         grid.innerHTML = `
             <div class="list-header">
@@ -1498,6 +1607,13 @@ function init() {
     });
     updateViewToggleUI();
 
+    // Group by tags toggle
+    const groupByTagsBtn = document.getElementById('groupByTagsBtn');
+    if (groupByTagsBtn) {
+        groupByTagsBtn.addEventListener('click', toggleGroupByTags);
+    }
+    updateGroupByTagsUI();
+
     // Pass/fail filter tabs
     document.querySelectorAll('#filterTabs .filter-tab').forEach(tab => {
         tab.addEventListener('click', () => applyFilter(tab.dataset.filter));
@@ -1595,7 +1711,74 @@ document.addEventListener('mouseover', (e) => {
             tooltip.style.left = `${Math.max(12, rect.left)}px`;
         }
     }
+
+    // Position scenario card tooltips in grouped view (to avoid overflow clipping)
+    const groupedCard = e.target.closest('.grouped-view .scenario-card .has-tooltip');
+    if (groupedCard) {
+        const tooltip = groupedCard.querySelector('.tooltip');
+        if (tooltip) {
+            positionCardTooltip(groupedCard, tooltip);
+        }
+    }
 });
+
+// Reset tooltip styles on mouseleave for grouped view cards
+document.addEventListener('mouseleave', (e) => {
+    const groupedCard = e.target.closest('.grouped-view .scenario-card .has-tooltip');
+    if (groupedCard) {
+        const tooltip = groupedCard.querySelector('.tooltip');
+        if (tooltip) {
+            // Reset inline styles so CSS can control visibility
+            tooltip.style.position = '';
+            tooltip.style.top = '';
+            tooltip.style.left = '';
+            tooltip.style.bottom = '';
+            tooltip.style.transform = '';
+            tooltip.style.opacity = '';
+            tooltip.style.visibility = '';
+        }
+    }
+}, true);
+
+// Position card tooltip with fixed positioning to avoid overflow clipping
+function positionCardTooltip(element, tooltip) {
+    const rect = element.getBoundingClientRect();
+    const padding = 12;
+
+    // Use fixed positioning and reset CSS-based position values
+    tooltip.style.position = 'fixed';
+    tooltip.style.bottom = 'auto';
+    tooltip.style.transform = 'none';
+
+    // Force visibility so we can measure
+    tooltip.style.opacity = '1';
+    tooltip.style.visibility = 'visible';
+
+    const tooltipHeight = tooltip.offsetHeight || 100;
+    const tooltipWidth = tooltip.offsetWidth || 280;
+
+    // Check space below vs above
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow >= tooltipHeight + padding) {
+        // Position below
+        tooltip.style.top = `${rect.bottom + 8}px`;
+    } else if (spaceAbove >= tooltipHeight + padding) {
+        // Position above
+        tooltip.style.top = `${rect.top - tooltipHeight - 8}px`;
+    } else {
+        // Default below, may need scroll
+        tooltip.style.top = `${rect.bottom + 8}px`;
+    }
+
+    // Horizontal positioning
+    let left = rect.left;
+    if (left + tooltipWidth > window.innerWidth - padding) {
+        left = window.innerWidth - tooltipWidth - padding;
+    }
+    tooltip.style.left = `${Math.max(padding, left)}px`;
+}
 
 // ============================================================
 // Panel Tooltip Positioning

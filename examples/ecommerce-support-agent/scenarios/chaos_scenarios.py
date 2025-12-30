@@ -231,7 +231,7 @@ llm_call_scenarios = [
             MaxTotalLLMCalls(5),  # Should not retry infinitely
             CompletesWithin(30.0),
         ],
-        meta={"category": "llm_call", "risk": "error_propagation"},
+        tags=["llm_call", "error_propagation"],
     ),
     # 2. 500 error handling
     Scenario(
@@ -248,7 +248,7 @@ llm_call_scenarios = [
         assertions=[
             MinChaosInjected(1),
         ],
-        meta={"category": "llm_call", "risk": "error_propagation"},
+        tags=["llm_call", "error_propagation"],
     ),
     # 3. LLM call bounds
     Scenario(
@@ -266,7 +266,7 @@ llm_call_scenarios = [
             MaxTotalLLMCalls(3),  # Simple question = few calls
             CompletesWithin(30.0),
         ],
-        meta={"category": "llm_call", "risk": "cost_explosion"},
+        tags=["llm_call", "cost_explosion"],
     ),
 ]
 
@@ -344,7 +344,7 @@ tool_chaos_scenarios = [
             MinChaosInjected(1),
             CompletesWithin(60.0),
         ],
-        meta={"category": "tool", "risk": "false_promises"},
+        tags=["tool", "false_promises"],
     ),
     # 7. Tool timeout - bounded wait
     Scenario(
@@ -363,7 +363,7 @@ tool_chaos_scenarios = [
         assertions=[
             CompletesWithin(45.0),  # Should timeout before 45s
         ],
-        meta={"category": "tool", "risk": "hung_request"},
+        tags=["tool", "hung_request"],
     ),
     # 8. Tool false data - semantic detection (LLM-powered mutation)
     Scenario(
@@ -383,7 +383,7 @@ tool_chaos_scenarios = [
             AllTurnsComplete(),
             MinChaosInjected(1),
         ],
-        meta={"category": "tool", "risk": "data_integrity", "semantic": True},
+        tags=["tool", "data_integrity", "semantic"],
     ),
     # 9. Tool retry storm prevention (multi-turn with LLM-generated retries)
     Scenario(
@@ -412,7 +412,7 @@ tool_chaos_scenarios = [
             MaxTotalLLMCalls(20),  # Bounded, not spiraling
             MinChaosInjected(1),
         ],
-        meta={"category": "tool", "risk": "retry_storm", "semantic": True},
+        tags=["tool", "retry_storm", "semantic"],
     ),
     # 10. Cascading tool failures
     Scenario(
@@ -439,7 +439,7 @@ tool_chaos_scenarios = [
             MaxTotalLLMCalls(8),  # Should not keep retrying
             MinChaosInjected(3),  # All 3 tools should fail
         ],
-        meta={"category": "tool", "risk": "cascading_failure"},
+        tags=["tool", "cascading_failure"],
     ),
 ]
 
@@ -467,7 +467,7 @@ user_input_scenarios = [
             MinChaosInjected(1),
             CompletesWithin(30.0),
         ],
-        meta={"category": "user_input", "risk": "prompt_injection"},
+        tags=["user_input", "prompt_injection"],
     ),
     # 12. User frustration handling (multi-turn with LLM-generated escalation)
     Scenario(
@@ -491,7 +491,7 @@ user_input_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(90.0),
         ],
-        meta={"category": "user_input", "risk": "user_frustration", "semantic": True},
+        tags=["user_input", "user_frustration", "semantic"],
     ),
 ]
 

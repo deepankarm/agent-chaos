@@ -2420,3 +2420,175 @@ code, .mono { font-family: var(--font-mono); }
     margin: 1em 0;
 }
 
+/* ============================================================
+   Group by Tags Button
+   ============================================================ */
+.group-by-tags-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.group-by-tags-btn:hover {
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+}
+
+.group-by-tags-btn.active {
+    background: var(--accent-glow);
+    color: var(--accent-secondary);
+    border: 1px solid var(--accent-primary);
+}
+
+.group-by-tags-btn svg {
+    opacity: 0.7;
+}
+
+.group-by-tags-btn:hover svg,
+.group-by-tags-btn.active svg {
+    opacity: 1;
+}
+
+/* ============================================================
+   Tag Group - Accordion Style
+   ============================================================ */
+.tag-group {
+    margin-bottom: var(--space-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    /* overflow: visible to allow tooltips to escape */
+}
+
+.tag-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-tertiary);
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    user-select: none;
+}
+
+.tag-group-header:hover {
+    background: var(--bg-elevated);
+}
+
+.tag-group-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.tag-group-chevron {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast);
+    width: 12px;
+}
+
+.tag-group-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.tag-group-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.tag-group-stats {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.tag-stat {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.tag-stat.chaos {
+    color: var(--chaos-orange);
+    background: var(--chaos-orange-glow);
+}
+
+.tag-stat.pass {
+    color: var(--resilient-green);
+    background: var(--resilient-glow);
+}
+
+.tag-stat.fail {
+    color: var(--chaos-red);
+    background: var(--chaos-red-glow);
+}
+
+.tag-group-content {
+    padding: var(--space-md);
+    transition: max-height var(--transition-smooth), padding var(--transition-smooth), opacity var(--transition-fast);
+}
+
+.tag-group-content.grid-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-md);
+}
+
+.tag-group-content.list-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Collapsed state */
+.tag-group.collapsed .tag-group-content {
+    display: none;
+}
+
+.tag-group.collapsed .tag-group-header {
+    border-radius: 10px;
+}
+
+/* Grouped view container */
+.scenarios-grid.grouped-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.scenarios-grid.grouped-view .scenario-card,
+.scenarios-grid.grouped-view .scenario-list-item {
+    margin: 0;
+}
+
+/* Fixed-position tooltips in grouped view (to escape overflow:hidden) */
+.grouped-view .scenario-card .tooltip {
+    z-index: 10000;
+}
+
+.grouped-view .scenario-card .tooltip[style*="position: fixed"] {
+    /* Reset transforms when using fixed positioning */
+    transform: none;
+}
+

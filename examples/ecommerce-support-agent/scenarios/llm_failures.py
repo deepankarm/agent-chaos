@@ -30,7 +30,7 @@ llm_failure_scenarios = [
         ],
         chaos=[llm_rate_limit().after_calls(1)],
         assertions=[MinChaosInjected(1), MaxTotalLLMCalls(10)],
-        meta={"kind": "llm_failure", "failure_type": "rate_limit", "timing": "early"},
+        tags=["llm_failure", "rate_limit", "early"],
     ),
     Scenario(
         name="llm-rate-limit-during-tools",
@@ -43,11 +43,7 @@ llm_failure_scenarios = [
         ],
         chaos=[llm_rate_limit().after_calls(2)],
         assertions=[MinChaosInjected(1)],
-        meta={
-            "kind": "llm_failure",
-            "failure_type": "rate_limit",
-            "timing": "mid_operation",
-        },
+        tags=["llm_failure", "rate_limit", "mid_operation"],
     ),
     Scenario(
         name="llm-timeout",
@@ -56,7 +52,7 @@ llm_failure_scenarios = [
         turns=[Turn("I need help with my order ORD-12345")],
         chaos=[llm_timeout(delay=5.0).on_call(1)],
         assertions=[MinChaosInjected(1)],
-        meta={"kind": "llm_failure", "failure_type": "timeout"},
+        tags=["llm_failure", "timeout"],
     ),
     Scenario(
         name="llm-server-error",
@@ -65,7 +61,7 @@ llm_failure_scenarios = [
         turns=[Turn("Where is my package with tracking 1Z999AA10123456784?")],
         chaos=[llm_server_error().on_call(1)],
         assertions=[MinChaosInjected(1)],
-        meta={"kind": "llm_failure", "failure_type": "server_error"},
+        tags=["llm_failure", "server_error"],
     ),
     Scenario(
         name="llm-rate-limit-persistent",
@@ -74,7 +70,7 @@ llm_failure_scenarios = [
         turns=[Turn("Help me track my order")],
         chaos=[llm_rate_limit().always()],
         assertions=[ExpectError("rate.*limit|429"), MinChaosInjected(1)],
-        meta={"kind": "llm_failure", "failure_type": "persistent_rate_limit"},
+        tags=["llm_failure", "persistent_rate_limit"],
     ),
     Scenario(
         name="llm-rate-limit-intermittent",
@@ -85,7 +81,7 @@ llm_failure_scenarios = [
         ],
         chaos=[llm_rate_limit().with_probability(0.5)],
         assertions=[CompletesWithin(120.0)],
-        meta={"kind": "llm_failure", "failure_type": "intermittent"},
+        tags=["llm_failure", "intermittent"],
     ),
     Scenario(
         name="llm-rate-limit-turn-2",
@@ -97,6 +93,6 @@ llm_failure_scenarios = [
         ],
         chaos=[llm_rate_limit().on_turn(2).after_calls(1)],
         assertions=[AllTurnsComplete(allow_failures=1), MaxTotalLLMCalls(15)],
-        meta={"kind": "llm_failure", "failure_type": "rate_limit_turn_2"},
+        tags=["llm_failure", "rate_limit_turn_2"],
     ),
 ]

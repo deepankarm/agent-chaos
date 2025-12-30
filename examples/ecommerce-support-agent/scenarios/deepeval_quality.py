@@ -205,7 +205,7 @@ deepeval_scenarios = [
             CompletesWithin(120.0),
             as_assertion(get_task_completion_metric),
         ],
-        meta={"kind": "deepeval", "type": "baseline"},
+        tags=["deepeval", "baseline"],
     ),
     Scenario(
         name="deepeval-error-handling",
@@ -228,7 +228,7 @@ deepeval_scenarios = [
             CompletesWithin(120.0),
             as_assertion(get_error_handling_metric),
         ],
-        meta={"kind": "deepeval", "type": "error_handling"},
+        tags=["deepeval", "error_handling"],
     ),
     Scenario(
         name="deepeval-data-corruption-detection",
@@ -254,7 +254,7 @@ deepeval_scenarios = [
                 name="detects-wrong-refund-amount",
             ),
         ],
-        meta={"kind": "deepeval", "type": "data_corruption"},
+        tags=["deepeval", "data_corruption"],
     ),
     Scenario(
         name="deepeval-tool-usage-verification",
@@ -277,7 +277,7 @@ deepeval_scenarios = [
             ),
             as_assertion(get_task_completion_metric),
         ],
-        meta={"kind": "deepeval", "type": "tool_verification"},
+        tags=["deepeval", "tool_verification"],
     ),
     Scenario(
         name="deepeval-multi-turn-chaos-quality",
@@ -304,7 +304,7 @@ deepeval_scenarios = [
             as_assertion(get_task_completion_metric),
             as_assertion(get_error_handling_metric),
         ],
-        meta={"kind": "deepeval", "type": "comprehensive"},
+        tags=["deepeval", "comprehensive"],
     ),
     Scenario(
         name="deepeval-hallucination-detection",
@@ -328,7 +328,7 @@ deepeval_scenarios = [
                 name="detects-hallucinated-product",
             ),
         ],
-        meta={"kind": "deepeval", "type": "hallucination"},
+        tags=["deepeval", "hallucination"],
     ),
     Scenario(
         name="deepeval-per-turn-and-conversation-evaluation",
@@ -369,6 +369,6 @@ deepeval_scenarios = [
                 name="conversation-task-completion",
             ),
         ],
-        meta={"kind": "deepeval", "type": "per_turn_and_conversation", "turns": 4},
+        tags=["deepeval", "per_turn_evaluation"],
     ),
 ]

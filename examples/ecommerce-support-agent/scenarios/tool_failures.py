@@ -86,7 +86,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={"kind": "tool_failure", "tool": "lookup_order", "failure_type": "error"},
+        tags=["tool_failure", "lookup_order", "error"],
     ),
     Scenario(
         name="tool-error-shipping-unavailable",
@@ -103,11 +103,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={
-            "kind": "tool_failure",
-            "tool": "get_shipping_status",
-            "failure_type": "error",
-        },
+        tags=["tool_failure", "get_shipping_status", "error"],
     ),
     Scenario(
         name="tool-timeout-refund-processing",
@@ -120,11 +116,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(90.0)],
-        meta={
-            "kind": "tool_failure",
-            "tool": "process_refund",
-            "failure_type": "timeout",
-        },
+        tags=["tool_failure", "process_refund", "timeout"],
     ),
     Scenario(
         name="tool-empty-order-lookup",
@@ -137,7 +129,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={"kind": "tool_failure", "tool": "lookup_order", "failure_type": "empty"},
+        tags=["tool_failure", "lookup_order", "empty"],
     ),
     Scenario(
         name="tool-mutate-stale-order-status",
@@ -150,11 +142,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={
-            "kind": "tool_failure",
-            "tool": "lookup_order",
-            "failure_type": "mutation",
-        },
+        tags=["tool_failure", "lookup_order", "mutation"],
     ),
     Scenario(
         name="tool-mutate-wrong-refund-amount",
@@ -167,7 +155,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={"kind": "tool_failure", "failure_type": "data_corruption"},
+        tags=["tool_failure", "data_corruption"],
     ),
     Scenario(
         name="tool-mutate-shipping-exception",
@@ -180,7 +168,7 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MinChaosInjected(1)],
-        meta={"kind": "tool_failure", "failure_type": "shipping_exception"},
+        tags=["tool_failure", "shipping_exception"],
     ),
     Scenario(
         name="tool-error-cascade-failure",
@@ -199,6 +187,6 @@ tool_failure_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(90.0), MaxTotalLLMCalls(10)],
-        meta={"kind": "tool_failure", "failure_type": "cascade"},
+        tags=["tool_failure", "cascade"],
     ),
 ]

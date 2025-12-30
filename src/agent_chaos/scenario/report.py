@@ -19,7 +19,7 @@ class RunReport:
     assertion_results: list[AssertionResult] = field(default_factory=list)
     error: str | None = None
     scorecard: dict[str, Any] = field(default_factory=dict)
-    meta: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
     agent_input: str | None = None
     agent_output: str | None = None
     conversation: list[dict[str, Any]] = field(default_factory=list)

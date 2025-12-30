@@ -25,7 +25,7 @@ baseline_scenarios = [
             CompletesWithin(60.0),
             MaxTotalLLMCalls(5),
         ],
-        meta={"kind": "baseline", "operation": "order_lookup"},
+        tags=["baseline", "order_lookup"],
     ),
     # Shipping tracking - happy path
     Scenario(
@@ -40,7 +40,7 @@ baseline_scenarios = [
             CompletesWithin(60.0),
             MaxTotalLLMCalls(5),
         ],
-        meta={"kind": "baseline", "operation": "shipping_tracking"},
+        tags=["baseline", "shipping_tracking"],
     ),
     # Refund inquiry - happy path
     Scenario(
@@ -55,7 +55,7 @@ baseline_scenarios = [
             CompletesWithin(60.0),
             MaxTotalLLMCalls(6),
         ],
-        meta={"kind": "baseline", "operation": "refund_inquiry"},
+        tags=["baseline", "refund_inquiry"],
     ),
     # Product availability - happy path
     Scenario(
@@ -70,6 +70,6 @@ baseline_scenarios = [
             CompletesWithin(60.0),
             MaxTotalLLMCalls(4),
         ],
-        meta={"kind": "baseline", "operation": "product_availability"},
+        tags=["baseline", "product_availability"],
     ),
 ]

@@ -74,7 +74,7 @@ multi_turn_scenarios = [
         ],
         chaos=[],
         assertions=[AllTurnsComplete(), CompletesWithin(120.0), MaxTotalLLMCalls(12)],
-        meta={"kind": "multi_turn", "turns": 2, "journey": "order_inquiry"},
+        tags=["multi_turn", "order_inquiry"],
     ),
     Scenario(
         name="multi-turn-refund-journey",
@@ -88,7 +88,7 @@ multi_turn_scenarios = [
         ],
         chaos=[],
         assertions=[AllTurnsComplete(), CompletesWithin(120.0)],
-        meta={"kind": "multi_turn", "turns": 2, "journey": "refund"},
+        tags=["multi_turn", "refund"],
     ),
     Scenario(
         name="multi-turn-refund-fails-turn2",
@@ -110,7 +110,7 @@ multi_turn_scenarios = [
             AllTurnsComplete(allow_failures=1),
             CompletesWithin(120.0),
         ],
-        meta={"kind": "multi_turn", "chaos_timing": "turn_2"},
+        tags=["multi_turn", "chaos_turn_2"],
     ),
     Scenario(
         name="multi-turn-rate-limit-turn2",
@@ -126,7 +126,7 @@ multi_turn_scenarios = [
             AllTurnsComplete(allow_failures=1),
             MaxTotalLLMCalls(15),
         ],
-        meta={"kind": "multi_turn", "chaos_type": "rate_limit_turn_2"},
+        tags=["multi_turn", "rate_limit"],
     ),
     Scenario(
         name="multi-turn-dynamic-escalation",
@@ -144,7 +144,7 @@ multi_turn_scenarios = [
             Turn(input=escalate_if_unhappy),  # Dynamic based on turn 1
         ],
         assertions=[AllTurnsComplete(allow_failures=1), CompletesWithin(180.0)],
-        meta={"kind": "multi_turn", "has_dynamic": True, "pattern": "escalation"},
+        tags=["multi_turn", "dynamic", "escalation"],
     ),
     Scenario(
         name="multi-turn-progressive-issues",
@@ -168,7 +168,7 @@ multi_turn_scenarios = [
             AllTurnsComplete(allow_failures=2),
             CompletesWithin(180.0),
         ],
-        meta={"kind": "multi_turn", "turns": 3, "pattern": "progressive_failure"},
+        tags=["multi_turn", "progressive_failure"],
     ),
     Scenario(
         name="multi-turn-frustrated-customer",
@@ -181,7 +181,7 @@ multi_turn_scenarios = [
         ],
         chaos=[tool_error("Network error").for_tool("lookup_order").on_turn(2)],
         assertions=[AllTurnsComplete(allow_failures=1), CompletesWithin(180.0)],
-        meta={"kind": "multi_turn", "pattern": "frustration_journey"},
+        tags=["multi_turn", "frustration"],
     ),
     Scenario(
         name="multi-turn-recovery",
@@ -201,7 +201,7 @@ multi_turn_scenarios = [
             TurnCompletes(turn=3),
             RecoveredAfterFailure(failed_turn=2),
         ],
-        meta={"kind": "multi_turn", "pattern": "recovery"},
+        tags=["multi_turn", "recovery"],
     ),
     Scenario(
         name="multi-turn-verified-journey",
@@ -216,6 +216,6 @@ multi_turn_scenarios = [
             TurnResponseContains(substring="laptop stand", turn=1),
             CompletesWithin(120.0),
         ],
-        meta={"kind": "multi_turn", "pattern": "verified"},
+        tags=["multi_turn", "verified"],
     ),
 ]

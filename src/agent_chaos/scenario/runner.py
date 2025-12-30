@@ -409,7 +409,7 @@ def run_scenario(
         assertion_results=assertion_results,
         error=scorecard.get("error"),
         scorecard=scorecard,
-        meta=scenario.meta,
+        tags=scenario.tags,
         agent_input=agent_input,
         agent_output=agent_output,
         conversation=conversation,

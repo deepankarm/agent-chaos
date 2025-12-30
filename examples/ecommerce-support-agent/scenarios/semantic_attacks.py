@@ -109,7 +109,7 @@ semantic_attack_scenarios = [
             ),
         ],
         assertions=[AllTurnsComplete(), CompletesWithin(60.0), MaxTotalLLMCalls(8)],
-        meta={"kind": "semantic_attack", "attack_type": "prompt_injection_simple"},
+        tags=["semantic_attack", "prompt_injection"],
     ),
     Scenario(
         name="semantic-fake-system-message",
@@ -125,7 +125,7 @@ semantic_attack_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(60.0),
         ],
-        meta={"kind": "semantic_attack", "attack_type": "fake_system_message"},
+        tags=["semantic_attack", "fake_system_message"],
     ),
     # Role confusion attack
     Scenario(
@@ -142,7 +142,7 @@ semantic_attack_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(60.0),
         ],
-        meta={"kind": "semantic_attack", "attack_type": "role_confusion"},
+        tags=["semantic_attack", "role_confusion"],
     ),
     # Jailbreak attempt
     Scenario(
@@ -159,7 +159,7 @@ semantic_attack_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(60.0),
         ],
-        meta={"kind": "semantic_attack", "attack_type": "jailbreak"},
+        tags=["semantic_attack", "jailbreak"],
     ),
     # Data exfiltration attempt
     Scenario(
@@ -176,7 +176,7 @@ semantic_attack_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(60.0),
         ],
-        meta={"kind": "semantic_attack", "attack_type": "data_exfiltration"},
+        tags=["semantic_attack", "data_exfiltration"],
     ),
     Scenario(
         name="semantic-multi-turn-injection",
@@ -193,6 +193,6 @@ semantic_attack_scenarios = [
             AllTurnsComplete(),
             CompletesWithin(120.0),
         ],
-        meta={"kind": "semantic_attack", "attack_type": "multi_turn_injection"},
+        tags=["semantic_attack", "multi_turn_injection"],
     ),
 ]
