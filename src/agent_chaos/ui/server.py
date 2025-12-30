@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import json
-import os
 import signal
 import threading
 from pathlib import Path
@@ -18,7 +17,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from agent_chaos.ui.events import event_bus
 
 STATIC_DIR = Path(__file__).parent / "static"
-DEFAULT_RUNS_DIR = Path(os.getenv("AGENT_CHAOS_RUNS_DIR", ".agent_chaos_runs"))
+
+_runs_dir: Path = Path(".agent_chaos_runs")
 
 app = FastAPI(title="🃏 agent-chaos", description="Fault Injection Dashboard")
 
@@ -44,11 +44,8 @@ async def dashboard():
 
 
 @app.get("/api/traces")
-async def get_traces(
-    include_artifacts: bool = Query(True),
-    runs_dir: str | None = Query(None),
-):
-    """Get all traces (live + optional artifact runs)."""
+async def get_traces(include_artifacts: bool = Query(True)):
+    """Get all traces (live + artifact runs)."""
     traces = [
         {
             "trace_id": t.trace_id,
@@ -76,9 +73,7 @@ async def get_traces(
         for t in event_bus.get_traces()
     ]
     if include_artifacts:
-        traces.extend(
-            _load_artifact_traces(Path(runs_dir) if runs_dir else DEFAULT_RUNS_DIR)
-        )
+        traces.extend(_load_artifact_traces(_runs_dir))
     return traces
 
 
@@ -114,9 +109,19 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8765):
-    """Run the dashboard server with clean shutdown on Ctrl+C."""
+def run_server(runs_dir: Path, host: str = "127.0.0.1", port: int = 8765):
+    """Run the dashboard server with clean shutdown on Ctrl+C.
+
+    Args:
+        runs_dir: Directory containing run artifacts from 'agent-chaos run'.
+        host: Host to bind to.
+        port: Port to bind to.
+    """
+    global _runs_dir
+    _runs_dir = runs_dir
+
     print(f"🃏 agent-chaos dashboard: http://{host}:{port}")
+    print(f"   runs: {runs_dir}")
 
     config = uvicorn.Config(
         app,

@@ -26,7 +26,6 @@ all = [
 
 [project.scripts]
 agent-chaos = "agent_chaos.cli:main"
-agent-chaos-ui = "agent_chaos.ui.server:run_server"
 
 [build-system]
 requires = ["hatchling"]

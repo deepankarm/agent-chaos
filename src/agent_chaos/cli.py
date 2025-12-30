@@ -82,7 +82,30 @@ def main() -> None:
         help="Stop on first failing scenario",
     )
 
+    ui_p = sub.add_parser("ui", help="Start the dashboard server")
+    ui_p.add_argument(
+        "runs_dir",
+        help="Directory containing run artifacts from 'agent-chaos run'",
+    )
+    ui_p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)",
+    )
+    ui_p.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Port to bind to (default: 8765)",
+    )
+
     args = parser.parse_args()
+
+    if args.cmd == "ui":
+        from agent_chaos.ui.server import run_server
+
+        run_server(runs_dir=Path(args.runs_dir), host=args.host, port=args.port)
+        return
 
     if args.cmd != "run":
         parser.print_help()
