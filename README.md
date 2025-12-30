@@ -2,7 +2,7 @@
 
 **Chaos engineering for AI agents.**
 
-*Nobody panics when things go according to plan.*
+> The Joker: *"Introduce a little anarchy. Upset the established order, and everything becomes chaos. I'm an agent of chaos. Oh, and you know the thing about chaos? It's fair!"*
 
 ---
 
