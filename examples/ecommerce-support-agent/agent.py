@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import json
 import random
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from agent_chaos import ChaosContext
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 
 
@@ -22,10 +23,10 @@ def get_anthropic_model() -> AnthropicModel:
 
 
 # =============================================================================
-# Mock Data Store (simulates database)
+# Initial State Templates (used to create fresh copies per scenario run)
 # =============================================================================
 
-ORDERS_DB: dict[str, dict[str, Any]] = {
+_INITIAL_ORDERS: dict[str, dict[str, Any]] = {
     "ORD-12345": {
         "order_id": "ORD-12345",
         "customer_id": "CUST-001",
@@ -76,7 +77,7 @@ ORDERS_DB: dict[str, dict[str, Any]] = {
     },
 }
 
-REFUNDS_DB: dict[str, dict[str, Any]] = {
+_INITIAL_REFUNDS: dict[str, dict[str, Any]] = {
     "REF-001": {
         "refund_id": "REF-001",
         "order_id": "ORD-12345",
@@ -87,7 +88,7 @@ REFUNDS_DB: dict[str, dict[str, Any]] = {
     },
 }
 
-SHIPPING_TRACKING: dict[str, list[dict[str, Any]]] = {
+_INITIAL_SHIPPING: dict[str, list[dict[str, Any]]] = {
     "1Z999AA10123456784": [
         {
             "timestamp": "2024-12-22 10:00",
@@ -112,10 +113,31 @@ SHIPPING_TRACKING: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
+_INITIAL_PRODUCTS: dict[str, dict[str, Any]] = {
+    "WH-100": {"name": "Wireless Headphones", "in_stock": True, "quantity": 150},
+    "USB-C-2M": {"name": "USB-C Cable", "in_stock": True, "quantity": 500},
+    "LS-PRO": {
+        "name": "Laptop Stand",
+        "in_stock": False,
+        "quantity": 0,
+        "restock_date": "2025-01-15",
+    },
+    "KB-MX": {"name": "Mechanical Keyboard", "in_stock": True, "quantity": 25},
+}
+
+
+# =============================================================================
+# Dependencies (with isolated state per scenario run)
+# =============================================================================
+
 
 @dataclass
 class SupportDeps:
-    """Dependencies for the support agent."""
+    """Dependencies for the support agent.
+
+    Each scenario run gets its own instance with fresh copies of the DBs,
+    ensuring complete isolation between concurrent/sequential runs.
+    """
 
     customer_id: str = "CUST-001"
     session_id: str = field(
@@ -124,8 +146,22 @@ class SupportDeps:
     escalation_requested: bool = False
     refund_attempts: int = 0
 
+    # Isolated state per run (fresh deep copies)
+    orders_db: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: deepcopy(_INITIAL_ORDERS)
+    )
+    refunds_db: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: deepcopy(_INITIAL_REFUNDS)
+    )
+    shipping_db: dict[str, list[dict[str, Any]]] = field(
+        default_factory=lambda: deepcopy(_INITIAL_SHIPPING)
+    )
+    products_db: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: deepcopy(_INITIAL_PRODUCTS)
+    )
 
-async def lookup_order(ctx, order_id: str) -> str:
+
+async def lookup_order(ctx: RunContext[SupportDeps], order_id: str) -> str:
     """Look up an order by its ID.
 
     Args:
@@ -134,7 +170,7 @@ async def lookup_order(ctx, order_id: str) -> str:
     Returns:
         JSON string with order details or error message
     """
-    order = ORDERS_DB.get(order_id)
+    order = ctx.deps.orders_db.get(order_id)
     if not order:
         return json.dumps({"error": f"Order {order_id} not found"})
 
@@ -153,7 +189,9 @@ async def lookup_order(ctx, order_id: str) -> str:
     )
 
 
-async def get_shipping_status(ctx, tracking_number: str) -> str:
+async def get_shipping_status(
+    ctx: RunContext[SupportDeps], tracking_number: str
+) -> str:
     """Get real-time shipping status for a tracking number.
 
     Args:
@@ -162,7 +200,7 @@ async def get_shipping_status(ctx, tracking_number: str) -> str:
     Returns:
         JSON string with shipping updates
     """
-    events = SHIPPING_TRACKING.get(tracking_number)
+    events = ctx.deps.shipping_db.get(tracking_number)
     if not events:
         return json.dumps({"error": f"No tracking info for {tracking_number}"})
 
@@ -176,7 +214,7 @@ async def get_shipping_status(ctx, tracking_number: str) -> str:
     )
 
 
-async def check_refund_eligibility(ctx, order_id: str) -> str:
+async def check_refund_eligibility(ctx: RunContext[SupportDeps], order_id: str) -> str:
     """Check if an order is eligible for refund.
 
     Args:
@@ -185,12 +223,12 @@ async def check_refund_eligibility(ctx, order_id: str) -> str:
     Returns:
         JSON string with eligibility details
     """
-    order = ORDERS_DB.get(order_id)
+    order = ctx.deps.orders_db.get(order_id)
     if not order:
         return json.dumps({"eligible": False, "reason": "Order not found"})
 
     # Check if already refunded
-    for refund in REFUNDS_DB.values():
+    for refund in ctx.deps.refunds_db.values():
         if refund["order_id"] == order_id:
             return json.dumps(
                 {
@@ -219,7 +257,9 @@ async def check_refund_eligibility(ctx, order_id: str) -> str:
     )
 
 
-async def process_refund(ctx, order_id: str, reason: str) -> str:
+async def process_refund(
+    ctx: RunContext[SupportDeps], order_id: str, reason: str
+) -> str:
     """Process a refund for an order.
 
     Args:
@@ -229,12 +269,12 @@ async def process_refund(ctx, order_id: str, reason: str) -> str:
     Returns:
         JSON string with refund confirmation or error
     """
-    order = ORDERS_DB.get(order_id)
+    order = ctx.deps.orders_db.get(order_id)
     if not order:
         return json.dumps({"success": False, "error": "Order not found"})
 
     # Check eligibility first
-    for refund in REFUNDS_DB.values():
+    for refund in ctx.deps.refunds_db.values():
         if refund["order_id"] == order_id:
             return json.dumps(
                 {
@@ -243,7 +283,7 @@ async def process_refund(ctx, order_id: str, reason: str) -> str:
                 }
             )
 
-    # Create refund
+    # Create refund (mutates isolated deps, not global state)
     refund_id = f"REF-{random.randint(100, 999)}"
     refund = {
         "refund_id": refund_id,
@@ -253,7 +293,7 @@ async def process_refund(ctx, order_id: str, reason: str) -> str:
         "reason": reason,
         "processed_date": datetime.now().strftime("%Y-%m-%d"),
     }
-    REFUNDS_DB[refund_id] = refund
+    ctx.deps.refunds_db[refund_id] = refund
 
     return json.dumps(
         {
@@ -266,7 +306,7 @@ async def process_refund(ctx, order_id: str, reason: str) -> str:
     )
 
 
-async def get_refund_status(ctx, refund_id: str) -> str:
+async def get_refund_status(ctx: RunContext[SupportDeps], refund_id: str) -> str:
     """Get the status of a refund.
 
     Args:
@@ -275,14 +315,16 @@ async def get_refund_status(ctx, refund_id: str) -> str:
     Returns:
         JSON string with refund status
     """
-    refund = REFUNDS_DB.get(refund_id)
+    refund = ctx.deps.refunds_db.get(refund_id)
     if not refund:
         return json.dumps({"error": f"Refund {refund_id} not found"})
 
     return json.dumps(refund)
 
 
-async def escalate_to_human(ctx, issue_summary: str, priority: str = "normal") -> str:
+async def escalate_to_human(
+    ctx: RunContext[SupportDeps], issue_summary: str, priority: str = "normal"
+) -> str:
     """Escalate the issue to a human support agent.
 
     Args:
@@ -293,6 +335,9 @@ async def escalate_to_human(ctx, issue_summary: str, priority: str = "normal") -
         JSON string with escalation confirmation
     """
     ticket_id = f"TKT-{random.randint(10000, 99999)}"
+
+    # Mark escalation in deps
+    ctx.deps.escalation_requested = True
 
     return json.dumps(
         {
@@ -307,7 +352,7 @@ async def escalate_to_human(ctx, issue_summary: str, priority: str = "normal") -
     )
 
 
-async def check_product_availability(ctx, sku: str) -> str:
+async def check_product_availability(ctx: RunContext[SupportDeps], sku: str) -> str:
     """Check product availability and stock levels.
 
     Args:
@@ -316,24 +361,21 @@ async def check_product_availability(ctx, sku: str) -> str:
     Returns:
         JSON string with availability info
     """
-    # Simulated product catalog
-    products = {
-        "WH-100": {"name": "Wireless Headphones", "in_stock": True, "quantity": 150},
-        "USB-C-2M": {"name": "USB-C Cable", "in_stock": True, "quantity": 500},
-        "LS-PRO": {
-            "name": "Laptop Stand",
-            "in_stock": False,
-            "quantity": 0,
-            "restock_date": "2025-01-15",
-        },
-        "KB-MX": {"name": "Mechanical Keyboard", "in_stock": True, "quantity": 25},
-    }
-
-    product = products.get(sku)
+    product = ctx.deps.products_db.get(sku)
     if not product:
         return json.dumps({"error": f"Product {sku} not found"})
 
     return json.dumps(product)
+
+
+def get_tools() -> list[Callable]:
+    return [
+        lookup_order,
+        get_shipping_status,
+        check_refund_eligibility,
+        process_refund,
+        get_refund_status,
+    ]
 
 
 def create_support_agent() -> Agent[SupportDeps, str]:
@@ -360,15 +402,15 @@ Guidelines:
 You have access to tools for order lookup, shipping tracking, refunds, and escalation.""",
     )
 
-    agent.tool(lookup_order)
-    agent.tool(get_shipping_status)
-    agent.tool(check_refund_eligibility)
-    agent.tool(process_refund)
-    agent.tool(get_refund_status)
-    agent.tool(escalate_to_human)
-    agent.tool(check_product_availability)
+    for tool in get_tools():
+        agent.tool(tool)
 
     return agent
+
+
+# =============================================================================
+# Entry Point for Chaos Scenarios
+# =============================================================================
 
 
 async def run_support_agent(ctx: ChaosContext, query: str) -> str:
@@ -384,7 +426,12 @@ async def run_support_agent(ctx: ChaosContext, query: str) -> str:
         The agent's response as a string
     """
     agent = create_support_agent()
-    deps = SupportDeps()
+
+    # Get or create deps - reuse across turns within the same scenario run
+    deps = ctx.agent_state.get("deps")
+    if deps is None:
+        deps = SupportDeps()
+        ctx.agent_state["deps"] = deps
 
     # Get message history from previous turns (if any)
     message_history = ctx.agent_state.get("message_history")
