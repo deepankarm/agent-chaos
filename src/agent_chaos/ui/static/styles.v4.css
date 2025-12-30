@@ -124,7 +124,11 @@ body {
     gap: var(--space-sm);
 }
 
-.logo-icon { font-size: 22px; }
+.logo-icon {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+}
 
 .logo-text {
     font-weight: 700;
@@ -805,6 +809,30 @@ body {
     z-index: 10;
 }
 
+/* Card description tooltip - shown on card hover */
+.card-description-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-medium);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-fast), visibility var(--transition-fast);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.scenario-card:hover .card-description-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
 /* Simple: green = pass, red dashed = fail */
 .scenario-card.passed { border-left: 4px solid var(--resilient-green); }
 .scenario-card.failed { border-left: 4px dashed var(--chaos-red); }
@@ -824,7 +852,7 @@ body {
     font-size: 14px;
     font-weight: 600;
     margin-bottom: 2px;
-    overflow: visible;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -857,6 +885,15 @@ body {
 .chaos-type-badge.multiple { background: var(--chaos-orange-glow); color: var(--chaos-orange); }
 .chaos-type-badge.none { background: var(--bg-tertiary); color: var(--text-muted); }
 .chaos-type-badge.unknown { background: var(--bg-tertiary); color: var(--text-muted); }
+
+/* Small variant for panel items */
+.chaos-type-badge.small {
+    padding: 1px 5px;
+    font-size: 9px;
+    margin-right: 6px;
+    min-width: 36px;
+    text-align: center;
+}
 
 /* Chaos category tags in modal */
 .chaos-category-tag {
@@ -929,12 +966,12 @@ body {
 .stat-pass { color: var(--resilient-green); }
 .stat-fail { color: var(--chaos-red); }
 
-/* Custom tooltips */
+/* Custom tooltips - use direct child selector to prevent showing nested tooltips */
 .has-tooltip {
     position: relative;
 }
 
-.has-tooltip .tooltip {
+.has-tooltip > .tooltip {
     position: absolute;
     bottom: calc(100% + 4px);
     left: 50%;
@@ -953,12 +990,12 @@ body {
     pointer-events: none;
 }
 
-.has-tooltip .tooltip.tooltip-below {
+.has-tooltip > .tooltip.tooltip-below {
     bottom: auto;
     top: calc(100% + 4px);
 }
 
-.has-tooltip .tooltip.tooltip-below::after {
+.has-tooltip > .tooltip.tooltip-below::after {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -970,7 +1007,7 @@ body {
     top: auto;
 }
 
-.has-tooltip:hover .tooltip {
+.has-tooltip:hover > .tooltip {
     opacity: 1;
     visibility: visible;
 }
@@ -1594,6 +1631,7 @@ body {
     text-align: center;
     padding: var(--space-xl) var(--space-lg);
     color: var(--text-secondary);
+    grid-column: 1 / -1;
 }
 
 .empty-icon {

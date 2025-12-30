@@ -425,16 +425,16 @@ function renderScenarioCard(trace) {
         }
     }
 
-    // Build description tooltip for card hover (positioned below to avoid header)
+    // Build description tooltip - shown on card hover, placed as direct child of card
     const descriptionTooltip = description
-        ? `<div class="tooltip tooltip-below"><div class="tooltip-title">Description</div><div class="tooltip-item tooltip-description">${escapeHtml(description)}</div></div>`
+        ? `<div class="card-description-tooltip"><div class="tooltip-title">Description</div><div class="tooltip-item tooltip-description">${escapeHtml(description)}</div></div>`
         : '';
 
     return `
-        <div class="${cardClass} ${description ? 'has-description' : ''}" data-trace-id="${trace.trace_id}">
+        <div class="${cardClass}" data-trace-id="${trace.trace_id}">
             <div class="card-header">
                 <div class="card-identity">
-                    <div class="card-name ${description ? 'has-tooltip' : ''}">${escapeHtml(trace.name)}${descriptionTooltip}</div>
+                    <div class="card-name">${escapeHtml(trace.name)}</div>
                     <div class="card-meta">${getChaosTypeBadge(trace)}${statsHtml}</div>
                 </div>
                 <div class="card-outcome">
@@ -444,6 +444,7 @@ function renderScenarioCard(trace) {
                     <span class="outcome-time">${elapsedS ? formatDuration(elapsedS) : '—'}</span>
                 </div>
             </div>
+            ${descriptionTooltip}
         </div>
     `;
 }
@@ -1353,9 +1354,13 @@ function renderChaosAssertionsPanel(chaos, assertions, options = {}) {
             const turnInfo = scope === 'scenario' && c.on_turn ? ` (turn ${c.on_turn})` : '';
             const allTurns = scope === 'scenario' && !c.on_turn ? ' (all turns)' : '';
             const tooltip = buildChaosTooltip(c);
+            // Get chaos category (LLM, TOOL, STREAM, etc.)
+            const chaosPoint = c.chaos_point || getChaosPointFallback(c.chaos_type);
+            const categoryClass = chaosPoint.toLowerCase();
+            const categoryLabel = getChaosTypeLabel(categoryClass);
             return `
                 <div class="panel-item chaos-item has-panel-tooltip">
-                    <span class="item-icon chaos-icon">⚡</span>
+                    <span class="chaos-type-badge ${categoryClass} small">${categoryLabel}</span>
                     <span class="item-name">${escapeHtml(c.chaos_type || 'chaos')}</span>
                     ${c.target_tool ? `<span class="item-target">→ ${escapeHtml(c.target_tool)}</span>` : ''}
                     <span class="item-scope">${turnInfo}${allTurns}</span>
@@ -1385,7 +1390,7 @@ function renderChaosAssertionsPanel(chaos, assertions, options = {}) {
         <div class="chaos-assertions-panel ${wrapperClass}" data-scope="${scope}">
             <div class="panel-col chaos-col">
                 <div class="panel-header">
-                    <span class="panel-label">${labelPrefix}Chaos</span>
+                    <span class="panel-label">⚡ ${labelPrefix}Chaos</span>
                     <span class="panel-count ${chaosCount > 0 ? 'has-items' : ''}">${chaosCount}</span>
                 </div>
                 <div class="panel-items">${chaosItemsHtml}</div>
@@ -1464,10 +1469,11 @@ function openScenarioModal(traceId) {
         <span class="outcome-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
     `;
     // Show trace_id and description together in subtitle - full text, no truncation
-    const subtitleText = description 
-        ? `${trace.trace_id} · ${description}`
-        : trace.trace_id;
-    document.getElementById('modalSubtitle').textContent = subtitleText;
+    // Convert newlines to <br> for proper rendering
+    const subtitleHtml = description
+        ? `${escapeHtml(trace.trace_id)} · ${escapeHtml(description).replace(/\n/g, '<br>')}`
+        : escapeHtml(trace.trace_id);
+    document.getElementById('modalSubtitle').innerHTML = subtitleHtml;
     
     document.getElementById('modalBody').innerHTML = 
         renderConversationTimeline(trace) + 
@@ -1711,74 +1717,8 @@ document.addEventListener('mouseover', (e) => {
             tooltip.style.left = `${Math.max(12, rect.left)}px`;
         }
     }
-
-    // Position scenario card tooltips in grouped view (to avoid overflow clipping)
-    const groupedCard = e.target.closest('.grouped-view .scenario-card .has-tooltip');
-    if (groupedCard) {
-        const tooltip = groupedCard.querySelector('.tooltip');
-        if (tooltip) {
-            positionCardTooltip(groupedCard, tooltip);
-        }
-    }
 });
 
-// Reset tooltip styles on mouseleave for grouped view cards
-document.addEventListener('mouseleave', (e) => {
-    const groupedCard = e.target.closest('.grouped-view .scenario-card .has-tooltip');
-    if (groupedCard) {
-        const tooltip = groupedCard.querySelector('.tooltip');
-        if (tooltip) {
-            // Reset inline styles so CSS can control visibility
-            tooltip.style.position = '';
-            tooltip.style.top = '';
-            tooltip.style.left = '';
-            tooltip.style.bottom = '';
-            tooltip.style.transform = '';
-            tooltip.style.opacity = '';
-            tooltip.style.visibility = '';
-        }
-    }
-}, true);
-
-// Position card tooltip with fixed positioning to avoid overflow clipping
-function positionCardTooltip(element, tooltip) {
-    const rect = element.getBoundingClientRect();
-    const padding = 12;
-
-    // Use fixed positioning and reset CSS-based position values
-    tooltip.style.position = 'fixed';
-    tooltip.style.bottom = 'auto';
-    tooltip.style.transform = 'none';
-
-    // Force visibility so we can measure
-    tooltip.style.opacity = '1';
-    tooltip.style.visibility = 'visible';
-
-    const tooltipHeight = tooltip.offsetHeight || 100;
-    const tooltipWidth = tooltip.offsetWidth || 280;
-
-    // Check space below vs above
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-
-    if (spaceBelow >= tooltipHeight + padding) {
-        // Position below
-        tooltip.style.top = `${rect.bottom + 8}px`;
-    } else if (spaceAbove >= tooltipHeight + padding) {
-        // Position above
-        tooltip.style.top = `${rect.top - tooltipHeight - 8}px`;
-    } else {
-        // Default below, may need scroll
-        tooltip.style.top = `${rect.bottom + 8}px`;
-    }
-
-    // Horizontal positioning
-    let left = rect.left;
-    if (left + tooltipWidth > window.innerWidth - padding) {
-        left = window.innerWidth - tooltipWidth - padding;
-    }
-    tooltip.style.left = `${Math.max(padding, left)}px`;
-}
 
 // ============================================================
 // Panel Tooltip Positioning

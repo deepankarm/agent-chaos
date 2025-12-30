@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import random
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -286,9 +287,11 @@ def run_scenario(
     run_dir: Path | None = None
 
     if artifacts_dir is not None:
+        artifacts_dir = artifacts_dir.resolve()  # Absolute path for multiprocessing
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        # directory name finalized after we get trace_id; we create a temp dir first
-        run_dir = artifacts_dir / f"{scenario.name}-{int(time.time())}"
+        # Use UUID to guarantee uniqueness across parallel workers
+        unique_id = str(uuid.uuid4())[:8]
+        run_dir = artifacts_dir / f"{scenario.name}-{unique_id}-{int(time.time())}"
         run_dir.mkdir(parents=True, exist_ok=True)
         if record_events:
             event_sink = JsonlEventSink(run_dir / "events.jsonl")
@@ -418,16 +421,5 @@ def run_scenario(
 
     if run_dir is not None:
         (run_dir / "scorecard.json").write_text(report.to_json(), encoding="utf-8")
-
-        # If we have a trace_id, rename run dir to include it for convenience.
-        if trace_id:
-            final_dir = (
-                run_dir.parent / f"{scenario.name}-{trace_id}-{int(time.time())}"
-            )
-            if final_dir != run_dir:
-                try:
-                    run_dir.rename(final_dir)
-                except Exception:
-                    pass
 
     return report

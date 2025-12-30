@@ -1,8 +1,14 @@
+<div align="center">
+
 # agent-chaos
+
+<img src="src/agent_chaos/ui/static/favicon.svg" width="200" height="200" alt="agent-chaos logo">
 
 **Chaos engineering for AI agents.**
 
-> The Joker: *"Introduce a little anarchy. Upset the established order, and everything becomes chaos. I'm an agent of chaos. Oh, and you know the thing about chaos? It's fair!"*
+> *"Introduce a little anarchy. Upset the established order, and everything becomes chaos. I'm an agent of chaos. Oh, and you know the thing about chaos? It's fair!"*
+
+</div>
 
 ---
 
