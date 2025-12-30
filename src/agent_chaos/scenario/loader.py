@@ -73,12 +73,17 @@ def load_target(ref: str) -> list[Scenario]:
     Supports:
     - file.py: scenario/get_scenario/scenarios/get_scenarios
     - module:attr where attr is Scenario / list[Scenario] or callable returning them
+
+    Each returned scenario has `_source_ref` set to the ref string for worker dispatch.
     """
     # module:attr form
     if ":" in ref and not ref.strip().endswith(".py"):
         mod_name, attr = ref.split(":", 1)
         module = importlib.import_module(mod_name)
-        return _coerce_scenarios(getattr(module, attr))
+        scenarios = _coerce_scenarios(getattr(module, attr))
+        for s in scenarios:
+            s._source_ref = ref
+        return scenarios
 
     path = Path(ref)
     if not path.exists():
@@ -87,18 +92,45 @@ def load_target(ref: str) -> list[Scenario]:
         raise IsADirectoryError(ref)
 
     module = _load_module_from_file(path.resolve())
+    scenarios: list[Scenario] | None = None
     if hasattr(module, "scenarios"):
-        return _coerce_scenarios(getattr(module, "scenarios"))
-    if hasattr(module, "get_scenarios"):
-        return _coerce_scenarios(getattr(module, "get_scenarios"))
-    if hasattr(module, "scenario"):
-        return _coerce_scenarios(getattr(module, "scenario"))
-    if hasattr(module, "get_scenario"):
-        return _coerce_scenarios(getattr(module, "get_scenario"))
+        scenarios = _coerce_scenarios(getattr(module, "scenarios"))
+    elif hasattr(module, "get_scenarios"):
+        scenarios = _coerce_scenarios(getattr(module, "get_scenarios"))
+    elif hasattr(module, "scenario"):
+        scenarios = _coerce_scenarios(getattr(module, "scenario"))
+    elif hasattr(module, "get_scenario"):
+        scenarios = _coerce_scenarios(getattr(module, "get_scenario"))
 
-    raise AttributeError(
-        f"{ref} must define `scenario`, `get_scenario()`, `scenarios`, or `get_scenarios()`"
-    )
+    if scenarios is None:
+        raise AttributeError(
+            f"{ref} must define `scenario`, `get_scenario()`, `scenarios`, or `get_scenarios()`"
+        )
+
+    for s in scenarios:
+        s._source_ref = ref
+    return scenarios
+
+
+def load_scenario_by_name(ref: str, name: str) -> Scenario:
+    """Load a specific scenario by name from a ref.
+
+    Args:
+        ref: Source ref (file path or module:attr).
+        name: Scenario name to find.
+
+    Returns:
+        The matching Scenario.
+
+    Raises:
+        ValueError: If no scenario with that name is found.
+    """
+    scenarios = load_target(ref)
+    for s in scenarios:
+        if s.name == name:
+            return s
+    available = [s.name for s in scenarios]
+    raise ValueError(f"No scenario named '{name}' in {ref}. Available: {available}")
 
 
 def load_scenario(ref: str) -> Scenario:

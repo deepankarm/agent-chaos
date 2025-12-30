@@ -2,7 +2,20 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger("agent_chaos")
+
+
+def _setup_logging() -> None:
+    """Configure logging for agent-chaos CLI."""
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 
 def _suppress_event_loop_closed_errors() -> None:
@@ -29,6 +42,46 @@ def _suppress_event_loop_closed_errors() -> None:
             return True
 
     logging.getLogger("asyncio").addFilter(EventLoopClosedFilter())
+
+
+def _run_scenario_worker(args: tuple[str, str, str, int | None, bool]) -> dict[str, Any]:
+    """Worker function for parallel scenario execution.
+
+    Runs in a subprocess. Loads scenario fresh and executes it.
+
+    Args:
+        args: Tuple of (source_ref, scenario_name, artifacts_dir, seed, record_events)
+
+    Returns:
+        Dict with scenario results (serializable subset of RunReport).
+    """
+    source_ref, scenario_name, artifacts_dir, seed, record_events = args
+
+    # Suppress asyncio errors in worker too
+    _suppress_event_loop_closed_errors()
+
+    from agent_chaos.scenario.loader import load_scenario_by_name
+    from agent_chaos.scenario.runner import run_scenario
+
+    scenario = load_scenario_by_name(source_ref, scenario_name)
+    report = run_scenario(
+        scenario,
+        artifacts_dir=Path(artifacts_dir),
+        seed=seed,
+        record_events=record_events,
+    )
+
+    # Return serializable dict (RunReport may not be pickleable)
+    return {
+        "scenario_name": report.scenario_name,
+        "passed": report.passed,
+        "elapsed_s": report.elapsed_s,
+        "error": report.error,
+        "assertion_results": [
+            {"name": ar.name, "passed": ar.passed, "message": ar.message}
+            for ar in report.assertion_results
+        ],
+    }
 
 
 def main() -> None:
@@ -81,6 +134,12 @@ def main() -> None:
         action="store_true",
         help="Stop on first failing scenario",
     )
+    run_p.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Number of parallel workers (default: 0 = CPU count). Use 1 for sequential.",
+    )
 
     ui_p = sub.add_parser("ui", help="Start the dashboard server")
     ui_p.add_argument(
@@ -111,42 +170,93 @@ def main() -> None:
         parser.print_help()
         return
 
+    _setup_logging()
+
     from agent_chaos.scenario.loader import load_scenarios
     from agent_chaos.scenario.runner import run_scenario
 
     scenarios = load_scenarios(args.targets, glob=args.glob, recursive=args.recursive)
-    print(f"\n🃏 Running {len(scenarios)} scenario(s)...\n")
+    total = len(scenarios)
+
+    # Resolve worker count
+    workers = args.workers
+    if workers == 0:
+        workers = os.cpu_count() or 1
+    workers = min(workers, total)  # No point having more workers than scenarios
+
+    logger.info(f"\n🃏 Running {total} scenario(s) with {workers} worker(s)...\n")
 
     passed = 0
     failed = 0
+    artifacts_dir = Path(args.artifacts_dir)
 
-    for i, scenario in enumerate(scenarios, 1):
-        print(f"[{i}/{len(scenarios)}] {scenario.name}...", end=" ", flush=True)
-        report = run_scenario(
-            scenario,
-            artifacts_dir=Path(args.artifacts_dir),
-            seed=args.seed,
-            record_events=not args.no_events,
-        )
+    if workers == 1:
+        # Sequential execution (original behavior)
+        for i, scenario in enumerate(scenarios, 1):
+            logger.info(f"[{i}/{total}] {scenario.name}...")
+            report = run_scenario(
+                scenario,
+                artifacts_dir=artifacts_dir,
+                seed=args.seed,
+                record_events=not args.no_events,
+            )
 
-        if report.passed:
-            passed += 1
-            print(f"✓ PASS ({report.elapsed_s:.2f}s)")
-        else:
-            failed += 1
-            print(f"✗ FAIL ({report.elapsed_s:.2f}s)")
-            if report.error:
-                print(f"    Error: {report.error}")
-            for ar in report.assertion_results:
-                if not ar.passed:
-                    print(f"    • {ar.name}: {ar.message}")
-            if args.fail_fast:
-                break
+            if report.passed:
+                passed += 1
+                logger.info(f"  ✓ PASS ({report.elapsed_s:.2f}s)")
+            else:
+                failed += 1
+                logger.info(f"  ✗ FAIL ({report.elapsed_s:.2f}s)")
+                if report.error:
+                    logger.info(f"    Error: {report.error}")
+                for ar in report.assertion_results:
+                    if not ar.passed:
+                        logger.info(f"    • {ar.name}: {ar.message}")
+                if args.fail_fast:
+                    break
+    else:
+        # Parallel execution
+        work_items = [
+            (
+                getattr(s, "_source_ref", "unknown"),
+                s.name,
+                str(artifacts_dir),
+                args.seed,
+                not args.no_events,
+            )
+            for s in scenarios
+        ]
 
-    summary = {
-        "scenarios_total": len(scenarios),
-        "passed": passed,
-        "failed": failed,
-    }
-    print(summary)
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            future_to_name = {}
+            for item in work_items:
+                logger.info(f"⏳ STARTING {item[1]}")
+                future = executor.submit(_run_scenario_worker, item)
+                future_to_name[future] = item[1]
+
+            for future in as_completed(future_to_name):
+                scenario_name = future_to_name[future]
+                try:
+                    result = future.result()
+                    if result["passed"]:
+                        passed += 1
+                        logger.info(
+                            f"✓ PASS {result['scenario_name']} ({result['elapsed_s']:.2f}s)"
+                        )
+                    else:
+                        failed += 1
+                        logger.info(
+                            f"✗ FAIL {result['scenario_name']} ({result['elapsed_s']:.2f}s)"
+                        )
+                        if result["error"]:
+                            logger.info(f"    Error: {result['error']}")
+                        for ar in result["assertion_results"]:
+                            if not ar["passed"]:
+                                logger.info(f"    • {ar['name']}: {ar['message']}")
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"✗ FAIL {scenario_name} (worker error: {e})")
+
+    logger.info("")
+    logger.info(f"Results: {passed} passed, {failed} failed, {total} total")
     raise SystemExit(0 if failed == 0 else 1)

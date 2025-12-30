@@ -395,9 +395,7 @@ class DeepEvalAssertion:
         if self.threshold is not None and hasattr(metric, "threshold"):
             metric.threshold = self.threshold
 
-        # Run the metric
-        metric.measure(test_case)
-
+        metric.measure(test_case, _show_indicator=False)
         score = getattr(metric, "score", 0.0)
         reason = getattr(metric, "reason", "")
         passed = score >= threshold
@@ -530,9 +528,9 @@ class ConversationalDeepEvalAssertion:
         if self.threshold is not None and hasattr(metric, "threshold"):
             metric.threshold = self.threshold
 
-        # Run the metric
+        # Run the metric (silenced to prevent Rich progress bar interference)
         try:
-            metric.measure(test_case)
+            metric.measure(test_case, _show_indicator=False)
         except Exception as e:
             return AssertionResult(
                 name=self._get_name(),
