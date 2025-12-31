@@ -2,7 +2,7 @@
 
 # agent-chaos
 
-<img src="src/agent_chaos/ui/static/favicon.svg" width="128" height="128" alt="agent-chaos logo">
+<img src="src/agent_chaos/ui/static/favicon.svg" width="150" height="150" alt="agent-chaos logo">
 
 **Chaos engineering for AI agents.**
 
