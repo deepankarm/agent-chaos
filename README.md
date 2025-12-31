@@ -16,6 +16,10 @@ Your agent works in demos. It passes evals. Then it hits production: the LLM rat
 
 **agent-chaos** breaks your agent on purpose, before production does.
 
+```bash
+pip install agent-chaos
+```
+
 ---
 
 ## Why does this exist?
@@ -118,6 +122,31 @@ variants = fuzz_chaos(
 ```
 
 Fuzzing is for exploration, not CI. See [`examples/ecommerce-support-agent/scenarios/fuzzing.py`](examples/ecommerce-support-agent/scenarios/fuzzing.py) for more.
+
+---
+
+## Examples
+
+The [`examples/ecommerce-support-agent/`](examples/ecommerce-support-agent/) directory contains a complete example with an e-commerce support agent built with `pydantic-ai`, including:
+
+- [`scenarios/quickstart.py`](examples/ecommerce-support-agent/scenarios/quickstart.py) - baseline scenarios with chaos variants
+- [`scenarios/resilience.py`](examples/ecommerce-support-agent/scenarios/resilience.py) - comprehensive resilience testing
+- [`scenarios/fuzzing.py`](examples/ecommerce-support-agent/scenarios/fuzzing.py) - automated, random chaos generation
+
+```bash
+cd examples/ecommerce-support-agent
+uv sync
+uv run agent-chaos run scenarios/quickstart.py
+
+# on another terminal
+uv run agent-chaos ui .agent_chaos_runs
+```
+
+![All scenarios](.github/images/all%20scenarios.png)
+
+![Rate limit injected](.github/images/rate-limit-injected.png)
+
+![Tool error injected](.github/images/tool-error-injected.png)
 
 ---
 
