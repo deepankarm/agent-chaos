@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -56,34 +57,44 @@ def _run_scenario_worker(
 
     Returns:
         Dict with scenario results (serializable subset of RunReport).
+
+    Raises:
+        RuntimeError: Re-raised with full traceback info for better error messages.
     """
     source_ref, source_index, scenario_name, artifacts_dir, seed, record_events = args
 
     # Suppress asyncio errors in worker too
     _suppress_event_loop_closed_errors()
 
-    from agent_chaos.scenario.loader import load_scenario_by_index
-    from agent_chaos.scenario.runner import run_scenario
+    try:
+        from agent_chaos.scenario.loader import load_scenario_by_index
+        from agent_chaos.scenario.runner import run_scenario
 
-    scenario = load_scenario_by_index(source_ref, source_index)
-    report = run_scenario(
-        scenario,
-        artifacts_dir=Path(artifacts_dir),
-        seed=seed,
-        record_events=record_events,
-    )
+        scenario = load_scenario_by_index(source_ref, source_index)
+        report = run_scenario(
+            scenario,
+            artifacts_dir=Path(artifacts_dir),
+            seed=seed,
+            record_events=record_events,
+        )
 
-    # Return serializable dict (RunReport may not be pickleable)
-    return {
-        "scenario_name": report.scenario_name,
-        "passed": report.passed,
-        "elapsed_s": report.elapsed_s,
-        "error": report.error,
-        "assertion_results": [
-            {"name": ar.name, "passed": ar.passed, "message": ar.message}
-            for ar in report.assertion_results
-        ],
-    }
+        # Return serializable dict (RunReport may not be pickleable)
+        return {
+            "scenario_name": report.scenario_name,
+            "passed": report.passed,
+            "elapsed_s": report.elapsed_s,
+            "error": report.error,
+            "assertion_results": [
+                {"name": ar.name, "passed": ar.passed, "message": ar.message}
+                for ar in report.assertion_results
+            ],
+        }
+    except Exception as e:
+        # Re-raise with full context for better error messages
+        tb = traceback.format_exc()
+        raise RuntimeError(
+            f"Worker failed for {scenario_name} (source: {source_ref}:{source_index})\n{tb}"
+        ) from e
 
 
 def main() -> None:
@@ -258,7 +269,16 @@ def main() -> None:
                                 logger.info(f"    • {ar['name']}: {ar['message']}")
                 except Exception as e:
                     failed += 1
-                    logger.error(f"✗ FAIL {scenario_name} (worker error: {e})")
+                    error_type = type(e).__name__
+                    error_msg = str(e) or "(no message)"
+                    logger.error(
+                        f"✗ FAIL {scenario_name} (worker error: {error_type}: {error_msg})"
+                    )
+                    tb = "".join(
+                        traceback.format_exception(type(e), e, e.__traceback__)
+                    )
+                    for line in tb.strip().split("\n"):
+                        logger.error(f"    {line}")
 
     logger.info("")
     logger.info(f"Results: {passed} passed, {failed} failed, {total} total")

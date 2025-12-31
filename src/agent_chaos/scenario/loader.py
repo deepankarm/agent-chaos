@@ -220,10 +220,19 @@ def load_scenarios_from_dir(
     # First, try to load as a package
     package_module = _load_package(base)
     if package_module is not None:
+        scenarios_list: list[Scenario] | None = None
         if hasattr(package_module, "get_scenarios"):
-            return _coerce_scenarios(getattr(package_module, "get_scenarios"))
-        if hasattr(package_module, "scenarios"):
-            return _coerce_scenarios(getattr(package_module, "scenarios"))
+            scenarios_list = _coerce_scenarios(getattr(package_module, "get_scenarios"))
+        elif hasattr(package_module, "scenarios"):
+            scenarios_list = _coerce_scenarios(getattr(package_module, "scenarios"))
+
+        if scenarios_list is not None:
+            # Set source_ref to the __init__.py file for worker dispatch
+            init_path = str(base / "__init__.py")
+            for i, s in enumerate(scenarios_list):
+                s._source_ref = init_path
+                s._source_index = i
+            return scenarios_list
 
     # Fall back to loading individual files
     pattern = f"**/{glob}" if recursive else glob
