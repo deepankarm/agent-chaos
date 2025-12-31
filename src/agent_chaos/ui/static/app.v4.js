@@ -1417,6 +1417,27 @@ function renderMultiTurnTimeline(conversation, turnResults) {
 
     let html = '<div class="turns-container">';
 
+    // Render system prompt as a collapsible section before turns
+    const preTurnEntries = turnGroups[0] || [];
+    const systemPromptEntry = preTurnEntries.find(e => e.type === 'system');
+    if (systemPromptEntry) {
+        html += `
+            <div class="turn system-turn collapsed" data-turn="system">
+                <div class="turn-header" onclick="toggleTurn(this)">
+                    <div class="turn-label">
+                        SYSTEM PROMPT
+                    </div>
+                    <div class="turn-stats">
+                        <span class="turn-chevron">▼</span>
+                    </div>
+                </div>
+                <div class="turn-content">
+                    <div class="system-prompt-content">${escapeHtml(systemPromptEntry.content)}</div>
+                </div>
+            </div>
+        `;
+    }
+
     turnResults.forEach((turnResult, index) => {
         const turnNum = turnResult.turn_number;
         const entries = turnGroups[turnNum] || [];

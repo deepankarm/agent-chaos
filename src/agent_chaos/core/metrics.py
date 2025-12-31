@@ -95,9 +95,14 @@ class MetricsStore:
 
         self._system_prompt_recorded = True
 
-        # Add to conversation as the first entry
+        # Insert at the beginning of conversation (not append)
         if self.system_prompt:
-            self.add_conversation_entry("system", content=self.system_prompt)
+            system_entry: dict[str, Any] = {
+                "type": "system",
+                "timestamp_ms": 0,  # System prompt is conceptually "before" everything
+                "content": self.system_prompt,
+            }
+            self.conversation.insert(0, system_entry)
 
     def add_conversation_entry(
         self,
