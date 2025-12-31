@@ -16,6 +16,33 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class at:
+    """Target chaos/assertions to a specific turn in a variant.
+
+    Used with Scenario.variant() to inject chaos or assertions
+    at specific turns without modifying the base scenario.
+
+    Attributes:
+        turn: Turn index (0-based) or turn ID (if turns have IDs).
+        chaos: Chaos events to inject at this turn.
+        assertions: Assertions to check after this turn.
+
+    Example:
+        baseline.variant(
+            name="refund-fails",
+            turns=[
+                at(2, chaos=[tool_error().for_tool("refund")]),
+                at(4, assertions=[turn_coherence]),
+            ],
+        )
+    """
+
+    turn: int | str
+    chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
+    assertions: list[Any] = field(default_factory=list)
+
+
+@dataclass
 class TurnResult:
     """Result of a completed turn, passed to dynamic input generators.
 
@@ -154,3 +181,84 @@ class Scenario:
     providers: list[str] = field(default_factory=lambda: ["anthropic"])
     assertions: list[Any] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+
+    def variant(
+        self,
+        *,
+        name: str,
+        description: str | None = None,
+        chaos: list[Chaos | ChaosBuilder] | None = None,
+        assertions: list[Any] | None = None,
+        turns: list[at] | None = None,
+        tags: list[str] | None = None,
+    ) -> "Scenario":
+        """Create a variant of this scenario with additional chaos/assertions.
+
+        This method creates a new scenario based on the current one, allowing
+        you to test the same agent journey under different failure conditions.
+
+        Args:
+            name: Name for the variant scenario.
+            description: Optional description (defaults to parent's).
+            chaos: Additional scenario-level chaos (appended to parent's).
+            assertions: Additional scenario-level assertions (appended to parent's).
+            turns: List of `at()` objects specifying turn-level modifications.
+            tags: Additional tags (appended to parent's).
+
+        Returns:
+            A new Scenario with the modifications applied.
+
+        Example:
+            baseline = Scenario(
+                name="customer-journey",
+                agent=run_agent,
+                turns=[
+                    Turn("Check order status"),
+                    Turn("Get shipping info"),
+                    Turn("Request refund"),
+                ],
+            )
+
+            # Create a variant where refund service fails
+            refund_fails = baseline.variant(
+                name="refund-service-down",
+                description="Refund tool fails on turn 3",
+                chaos=[llm_rate_limit().after_calls(5)],
+                turns=[
+                    at(2, chaos=[tool_error().for_tool("process_refund")]),
+                ],
+                assertions=[error_handling_metric],
+            )
+        """
+        # Build turn modifications lookup: {turn_index: at(...)}
+        turn_mods: dict[int | str, at] = {}
+        for mod in turns or []:
+            turn_mods[mod.turn] = mod
+
+        # Deep copy turns with modifications applied
+        new_turns = []
+        for i, turn in enumerate(self.turns):
+            mod = turn_mods.get(i)
+            if mod:
+                # Merge chaos and assertions
+                new_turns.append(
+                    Turn(
+                        input=turn.input,
+                        chaos=list(turn.chaos) + list(mod.chaos),
+                        assertions=list(turn.assertions) + list(mod.assertions),
+                    )
+                )
+            else:
+                # Keep original turn (no copy needed, turns are immutable-ish)
+                new_turns.append(turn)
+
+        return Scenario(
+            name=name,
+            description=description or self.description,
+            agent=self.agent,
+            turns=new_turns,
+            chaos=list(self.chaos) + (chaos or []),
+            providers=list(self.providers),
+            assertions=list(self.assertions) + (assertions or []),
+            tags=list(self.tags) + (tags or []),
+        )

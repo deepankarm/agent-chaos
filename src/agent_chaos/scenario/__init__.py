@@ -33,7 +33,7 @@ from agent_chaos.scenario.assertions import (
     MaxTokensPerTurn,
     TokenBurstDetection,
 )
-from agent_chaos.scenario.model import Scenario, Turn, TurnResult
+from agent_chaos.scenario.model import Scenario, Turn, TurnResult, at
 from agent_chaos.scenario.report import RunReport
 from agent_chaos.scenario.runner import run_scenario
 
@@ -42,6 +42,7 @@ __all__ = [
     "Scenario",
     "Turn",
     "TurnResult",
+    "at",
     "RunReport",
     "run_scenario",
     # Scenario-level assertions
