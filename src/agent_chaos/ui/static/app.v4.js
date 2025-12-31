@@ -265,11 +265,12 @@ function computeSummary() {
     if (traces.length === 0) {
         return { total: 0, passed: 0, failed: 0, faults: 0, calls: 0,
                  resilienceRate: null, avgLatency: null, totalDuration: null, chaosScenarios: 0,
-                 totalTokens: 0 };
+                 totalTokens: 0, assertionsPassed: 0, assertionsTotal: 0 };
     }
 
     let passed = 0, failed = 0, faults = 0, calls = 0, chaosScenarios = 0;
     let latencies = [], totalDuration = 0, totalTokens = 0;
+    let assertionsPassed = 0, assertionsTotal = 0;
 
     traces.forEach(t => {
         const report = t.report || {};
@@ -287,6 +288,11 @@ function computeSummary() {
         // Aggregate tokens from scorecard
         totalTokens += scorecard.total_tokens || 0;
 
+        // Aggregate assertions (scenario + turn-level)
+        const assertions = getAllAssertions(report);
+        assertionsTotal += assertions.length;
+        assertionsPassed += assertions.filter(a => a.passed).length;
+
         (t.spans || []).forEach(s => {
             if (s.latency_ms != null) latencies.push(s.latency_ms);
         });
@@ -298,14 +304,15 @@ function computeSummary() {
     const resilienceRate = chaosTraces.length > 0 ? Math.round((resilientTraces.length / chaosTraces.length) * 100) : null;
 
     return { total: traces.length, passed, failed, faults, calls,
-             resilienceRate, avgLatency, totalDuration, chaosScenarios, totalTokens };
+             resilienceRate, avgLatency, totalDuration, chaosScenarios, totalTokens,
+             assertionsPassed, assertionsTotal };
 }
 
 function renderNarrativeSummary() {
     const s = computeSummary();
     const summaryBar = document.getElementById('summaryBar');
     const headerStats = document.getElementById('headerStats');
-    
+
     if (s.total === 0) {
         summaryBar.classList.add('hidden');
         headerStats.innerHTML = '';
@@ -314,36 +321,32 @@ function renderNarrativeSummary() {
 
     // Hide the old summary bar
     summaryBar.classList.add('hidden');
-    
+
     // Build compact header stats
-    const passClass = s.failed === 0 ? 'all-pass' : (s.passed === 0 ? 'all-fail' : '');
+    const scenarioClass = s.failed === 0 ? 'all-pass' : (s.passed === 0 ? 'all-fail' : '');
+    const assertionClass = s.assertionsPassed === s.assertionsTotal ? 'all-pass' : '';
     const resilienceClass = s.resilienceRate >= 80 ? 'good' : (s.resilienceRate >= 50 ? 'warn' : 'bad');
-    
+
     let statsHtml = `
-        <div class="header-stat ${passClass}">
+        <div class="header-stat ${scenarioClass}">
             <span class="stat-value">${s.passed}/${s.total}</span>
-            <span class="stat-label">passed</span>
+            <span class="stat-label">scenarios</span>
         </div>
         <div class="header-stat chaos">
             <span class="stat-value">⚡${s.faults}</span>
             <span class="stat-label">chaos</span>
         </div>
+        <div class="header-stat ${assertionClass}">
+            <span class="stat-value">✓${s.assertionsPassed}/${s.assertionsTotal}</span>
+            <span class="stat-label">assertions</span>
+        </div>
     `;
-    
+
     if (s.resilienceRate !== null) {
         statsHtml += `
             <div class="header-stat ${resilienceClass}">
                 <span class="stat-value">${s.resilienceRate}%</span>
                 <span class="stat-label">resilient</span>
-            </div>
-        `;
-    }
-    
-    if (s.totalTokens > 0) {
-        statsHtml += `
-            <div class="header-stat tokens">
-                <span class="stat-value">🎫 ${formatTokens(s.totalTokens)}</span>
-                <span class="stat-label">tokens</span>
             </div>
         `;
     }
@@ -358,6 +361,27 @@ function renderNarrativeSummary() {
     }
 
     headerStats.innerHTML = statsHtml;
+}
+
+// ============================================================
+// Assertion Helpers
+// ============================================================
+function getAllAssertions(report) {
+    // Collect all assertions (scenario-level + turn-level) from a report
+    const assertions = [];
+    // Scenario-level assertions
+    if (report?.assertion_results) {
+        assertions.push(...report.assertion_results);
+    }
+    // Turn-level assertions
+    if (report?.turn_results) {
+        report.turn_results.forEach(tr => {
+            if (tr.assertion_results) {
+                assertions.push(...tr.assertion_results);
+            }
+        });
+    }
+    return assertions;
 }
 
 // ============================================================
@@ -415,7 +439,7 @@ function renderScenarioCard(trace) {
     if (isVariant) cardClass += ' variant';
 
     const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
-    const assertions = report.assertion_results || [];
+    const assertions = getAllAssertions(report);
     const failedAssertions = assertions.filter(a => !a.passed);
     const passedAssertions = assertions.filter(a => a.passed);
     const passedCount = passedAssertions.length;
@@ -487,7 +511,7 @@ function renderScenarioListItem(trace) {
     if (isVariant) rowClass += ' variant';
 
     const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
-    const assertions = report.assertion_results || [];
+    const assertions = getAllAssertions(report);
     const failedAssertions = assertions.filter(a => !a.passed);
     const passedAssertions = assertions.filter(a => a.passed);
     const failedCount = failedAssertions.length;
@@ -794,16 +818,17 @@ function renderTagGroup(tag, traces) {
         const passed = baseline.status === 'success' || report.passed;
         const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
         const baselineChaos = baseline.fault_count || 0;
-        const baselineAssertions = report.assertion_results || [];
+        const baselineAssertions = getAllAssertions(report);
         const baselinePassed = baselineAssertions.filter(a => a.passed).length;
         const baselineFailed = baselineAssertions.filter(a => !a.passed).length;
         const variantCount = variants.length;
 
-        // Variant stats summary
+        // Variant stats summary - aggregate assertions across all variants
         let variantsPassed = 0, variantsFailed = 0, variantsChaos = 0, variantsTotalTime = 0;
         variants.forEach(v => {
-            if (v.status === 'success' || v.report?.passed) variantsPassed++;
-            else variantsFailed++;
+            const assertions = getAllAssertions(v.report);
+            variantsPassed += assertions.filter(a => a.passed).length;
+            variantsFailed += assertions.filter(a => !a.passed).length;
             variantsChaos += v.fault_count || 0;
             variantsTotalTime += v.report?.elapsed_s || v.report?.scorecard?.elapsed_s || 0;
         });
