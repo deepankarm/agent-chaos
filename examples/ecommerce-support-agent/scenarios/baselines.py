@@ -23,11 +23,7 @@ to create variants with different chaos injections.
 """
 
 from agent_chaos import BaselineScenario, Turn
-from agent_chaos.scenario import (
-    AllTurnsComplete,
-    CompletesWithin,
-    MaxTotalLLMCalls,
-)
+from agent_chaos.scenario import AllTurnsComplete, CompletesWithin, MaxTotalLLMCalls
 
 from agent import run_support_agent
 

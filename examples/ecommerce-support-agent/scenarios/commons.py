@@ -39,13 +39,29 @@ def get_error_handling_metric():
     return GEval(
         name="error-handling",
         criteria="""Evaluate how well the agent handled errors or unexpected situations.
-        A good response should:
+
+        IMPORTANT: Check the CONTEXT field first to see what errors were injected:
+        - If context says "No errors were injected", then evaluate whether the agent
+          successfully completed the task (this is a baseline/happy-path scenario)
+        - If context lists specific errors (tool failures, rate limits, etc.), evaluate
+          how gracefully the agent handled those specific errors
+
+        For error scenarios, a good response should:
         1. Acknowledge when something went wrong (if applicable)
         2. Not pretend to have information it couldn't retrieve
         3. Offer alternatives or next steps when possible
         4. Maintain a helpful, professional tone
-        5. Not expose internal error messages or stack traces to the customer""",
-        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+        5. Not expose internal error messages or stack traces to the customer
+
+        For baseline (no errors), a good response should:
+        1. Successfully address the customer's request
+        2. Provide accurate information from tools
+        3. Complete the task professionally""",
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.CONTEXT,
+        ],
         threshold=0.5,
         model=_get_eval_model(),
     )
@@ -62,12 +78,22 @@ def get_response_coherence_metric():
         Check that:
         1. The response is in proper English (or appropriate language)
         2. Sentences are grammatically correct and make sense
-        3. The response addresses the customer (not random text)
+        3. The response addresses the customer's current message (not random text)
         4. There's no garbled, truncated, or nonsensical output
 
-        This is a basic sanity check - even if the agent couldn't help,
-        it should at least respond coherently.""",
-        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+        IMPORTANT: Use context from prior conversation to understand the flow.
+        - It's perfectly fine to reference previous actions (e.g., mentioning a refund
+          that was processed earlier, then escalating as the customer requested)
+        - The response should make sense given the conversation history
+        - Multiple actions in sequence (process refund, then escalate) is coherent behavior
+
+        This is a basic sanity check - focus on language quality and relevance,
+        not business logic. Even if the agent couldn't help, it should respond coherently.""",
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.CONTEXT,
+        ],
         threshold=0.7,
         model=_get_eval_model(),
     )
@@ -95,10 +121,43 @@ def get_task_completion_metric():
     )
 
 
+def get_data_sanity_metric():
+    """Evaluate whether the agent validates suspicious/implausible data."""
+    from deepeval.metrics import GEval
+    from deepeval.test_case import LLMTestCaseParams
+
+    return GEval(
+        name="data-sanity",
+        criteria="""Evaluate whether the agent critically assessed data before relaying it.
+        When data seems implausible, alarming, or contradictory, a good agent should:
+        1. NOT blindly relay alarming information (e.g., "contraband detected" for a laptop stand)
+        2. Acknowledge uncertainty or potential system errors
+        3. Offer to verify or investigate further
+        4. Not cause unnecessary panic with unverified alarming data
+
+        RED FLAGS the agent should catch:
+        - Customs/contraband issues for domestic orders of normal products
+        - Impossible dates (delivery before order date, dates in far future/past)
+        - Negative prices or refund amounts
+        - Status changes that don't make sense (e.g., delivered → shipped)
+
+        Score LOW if the agent presents clearly implausible data as factual.
+        Score HIGH if the agent questions suspicious data or caveats it appropriately.""",
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.CONTEXT,
+        ],
+        threshold=0.5,
+        model=_get_eval_model(),
+    )
+
+
 # Pre-wrapped assertions for convenience
 turn_coherence = as_assertion(get_response_coherence_metric, name="turn-coherence")
 error_handling = as_assertion(get_error_handling_metric, name="error-handling")
 task_completion = as_assertion(get_task_completion_metric, name="task-completion")
+data_sanity = as_assertion(get_data_sanity_metric, name="data-sanity")
 
 
 # =============================================================================
