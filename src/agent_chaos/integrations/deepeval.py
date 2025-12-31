@@ -145,6 +145,32 @@ def _format_conversation_for_eval(ctx: "ChaosContext") -> tuple[str, str]:
     return "\n".join(input_parts), "\n".join(output_parts)
 
 
+def _extract_chaos_context(ctx: "ChaosContext", turn: int | None = None) -> str | None:
+    """Extract chaos injection info for evaluator context.
+
+    Returns a string describing what chaos was injected, or None if no chaos.
+    """
+    chaos_events = []
+    for entry in ctx.metrics.conversation:
+        if entry.get("type") == "chaos":
+            event_turn = entry.get("turn_number", 0)
+            # If evaluating a specific turn, only include chaos up to that turn
+            if turn is not None and event_turn > turn:
+                continue
+            fault_type = entry.get("fault_type", "unknown")
+            target = entry.get("target_tool", "")
+            chaos_point = entry.get("chaos_point", "")
+            if target:
+                chaos_events.append(f"- {fault_type} on {target} (turn {event_turn})")
+            else:
+                chaos_events.append(f"- {fault_type} at {chaos_point} (turn {event_turn})")
+
+    if not chaos_events:
+        return None
+
+    return "Chaos/errors injected during this scenario:\n" + "\n".join(chaos_events)
+
+
 def build_llm_test_case(
     ctx: "ChaosContext",
     expected_tools: list[str] | None = None,
@@ -167,16 +193,40 @@ def build_llm_test_case(
     from deepeval.test_case import LLMTestCase, ToolCall
 
     # Get input and output
+    context_strings: list[str] = []
     if turn is not None:
-        # Specific turn requested
+        # Specific turn requested - include prior conversation as context
         turn_result = ctx.get_turn_result(turn)
         if turn_result is None:
             raise ValueError(f"Turn {turn} not found in context")
         input_text = turn_result.input
         actual_output = turn_result.response
+
+        # Build conversation context from prior turns for the evaluator
+        if ctx.turn_results and turn > 1:
+            prior_turns = []
+            for tr in ctx.turn_results:
+                if tr.turn_number < turn:
+                    prior_turns.append(
+                        f"[Turn {tr.turn_number}] User: {tr.input}\n"
+                        f"[Turn {tr.turn_number}] Assistant: {tr.response}"
+                    )
+            if prior_turns:
+                context_strings.append(
+                    "Prior conversation:\n" + "\n\n".join(prior_turns)
+                )
     else:
         # No specific turn - use full conversation context for multi-turn
         input_text, actual_output = _format_conversation_for_eval(ctx)
+
+    # Add chaos context so evaluator knows what errors were injected
+    chaos_context = _extract_chaos_context(ctx, turn)
+    if chaos_context:
+        context_strings.append(chaos_context)
+    else:
+        context_strings.append(
+            "No errors were injected - all tools and services worked normally."
+        )
 
     # Extract tools called
     tools_called = _extract_tools_called(ctx)
@@ -193,6 +243,7 @@ def build_llm_test_case(
         input=input_text,
         actual_output=actual_output,
         expected_output=expected_output,
+        context=context_strings,
         tools_called=tools_called if tools_called else None,
         expected_tools=expected_tools_objs,
         retrieval_context=retrieval_context if retrieval_context else None,
