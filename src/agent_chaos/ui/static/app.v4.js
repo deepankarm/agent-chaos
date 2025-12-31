@@ -817,37 +817,32 @@ function renderTagGroup(tag, traces) {
 
         return `
             <div class="tag-group parent-group ${isCollapsed ? 'collapsed' : ''}" data-tag="${escapeHtml(tag)}">
-                <div class="parent-group-header ${passed ? 'passed' : 'failed'}" data-trace-id="${baseline.trace_id}">
-                    <div class="parent-header-left" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                <div class="parent-group-header ${passed ? 'passed' : 'failed'}" data-trace-id="${baseline.trace_id}" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                    <div class="parent-header-left">
                         <span class="tag-group-chevron">${isCollapsed ? '▶' : '▼'}</span>
                         <span class="parent-name">${escapeHtml(baseline.name)}</span>
                         <span class="outcome-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
                     </div>
-                    <div class="parent-stats-box baseline-stats">
+                    <div class="parent-stats-box baseline-stats clickable" onclick="event.stopPropagation(); openScenarioModal('${baseline.trace_id}')" title="View baseline details">
                         <span class="stats-label">baseline</span>
                         <span class="stats-items">
-                            ${baselineChaos > 0 ? `<span class="stat-item chaos">⚡${baselineChaos}</span>` : '<span class="stat-item chaos dim">⚡0</span>'}
-                            <span class="stat-item pass">✓${baselinePassed}</span>
-                            ${baselineFailed > 0 ? `<span class="stat-item fail">✗${baselineFailed}</span>` : ''}
+                            <span class="stat-item chaos${baselineChaos === 0 ? ' dim' : ''}">⚡${baselineChaos}</span>
+                            <span class="stat-item pass${baselinePassed === 0 ? ' dim' : ''}">✓${baselinePassed}</span>
+                            <span class="stat-item fail${baselineFailed === 0 ? ' dim' : ''}">✗${baselineFailed}</span>
                             <span class="stat-sep">|</span>
                             <span class="stat-item duration">${elapsedS ? formatDuration(elapsedS) : '—'}</span>
                         </span>
                     </div>
-                    <div class="parent-stats-box variants-stats" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                    <div class="parent-stats-box variants-stats">
                         <span class="stats-label">${variantCount} variant${variantCount !== 1 ? 's' : ''}</span>
-                        ${variantCount > 0 ? `<span class="stats-items">
-                            <span class="stat-item chaos">⚡${variantsChaos}</span>
-                            <span class="stat-item pass">✓${variantsPassed}</span>
-                            ${variantsFailed > 0 ? `<span class="stat-item fail">✗${variantsFailed}</span>` : ''}
+                        <span class="stats-items">
+                            <span class="stat-item chaos${variantsChaos === 0 ? ' dim' : ''}">⚡${variantsChaos}</span>
+                            <span class="stat-item pass${variantsPassed === 0 ? ' dim' : ''}">✓${variantsPassed}</span>
+                            <span class="stat-item fail${variantsFailed === 0 ? ' dim' : ''}">✗${variantsFailed}</span>
                             <span class="stat-sep">|</span>
-                            <span class="stat-item duration">${formatDuration(variantsTotalTime)}</span>
-                        </span>` : ''}
+                            <span class="stat-item duration">${variantsTotalTime > 0 ? formatDuration(variantsTotalTime) : '—'}</span>
+                        </span>
                     </div>
-                    <button class="parent-expand-btn" onclick="event.stopPropagation(); openScenarioModal('${baseline.trace_id}')" title="View baseline details">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M4 1h8v2H6.414l5.293 5.293-1.414 1.414L5 4.414V8H3V1h1zm8 14H4v-2h5.586l-5.293-5.293 1.414-1.414L11 11.586V8h2v7h-1z"/>
-                        </svg>
-                    </button>
                 </div>
                 <div class="tag-group-content ${state.viewMode === 'list' ? 'list-content' : 'grid-content'}">
                     ${scenariosHtml}
@@ -1442,10 +1437,10 @@ function renderMultiTurnTimeline(conversation, turnResults) {
                         ${turnResult.is_dynamic ? '<span class="dynamic-indicator">λ</span>' : ''}
                     </div>
                     <div class="turn-stats">
-                        <span>${turnResult.llm_calls || 0} LLM</span>
-                        <span>${toolCalls} tools</span>
-                        ${turnTokens > 0 ? `<span class="turn-tokens" ${tokenTooltip}>🎫 ${formatTokens(turnTokens)}</span>` : ''}
-                        <span>${formatDuration(turnResult.duration_s)}</span>
+                        <span class="turn-stat-pill">${turnResult.llm_calls || 0} llm</span>
+                        <span class="turn-stat-pill">${toolCalls} tool${toolCalls !== 1 ? 's' : ''}</span>
+                        ${turnTokens > 0 ? `<span class="turn-stat-pill" ${tokenTooltip}>${formatTokens(turnTokens)} tokens</span>` : ''}
+                        <span class="turn-stat-pill">${formatDuration(turnResult.duration_s)}</span>
                         <span class="turn-chevron">▼</span>
                     </div>
                 </div>

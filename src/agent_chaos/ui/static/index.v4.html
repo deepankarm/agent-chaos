@@ -104,12 +104,25 @@
         <section class="scenarios-section">
             <div class="scenarios-grid" id="scenariosGrid">
                 <div class="empty-state" id="emptyState">
-                    <div class="empty-icon">🎲</div>
-                    <h3 class="empty-title">Awaiting Chaos...</h3>
-                    <p class="empty-text">
-                        Run your agent with chaos scenarios or use 
-                        <code>chaos_context("test", emit_events=True)</code>
-                    </p>
+                    <div class="empty-icon">⚡</div>
+                    <h3 class="empty-title">No scenarios yet</h3>
+                    <p class="empty-text">Create a scenario file:</p>
+                    <pre class="empty-code-block"><span class="code-comment"># scenarios/test.py</span>
+<span class="code-keyword">from</span> agent_chaos <span class="code-keyword">import</span> BaselineScenario, Turn
+<span class="code-keyword">from</span> agent_chaos.chaos <span class="code-keyword">import</span> llm_rate_limit
+
+baseline = BaselineScenario(
+    name=<span class="code-string">"my-agent"</span>,
+    agent=my_agent_fn,
+    turns=[Turn(<span class="code-string">"Hello!"</span>)],
+)
+
+variant = baseline.variant(
+    name=<span class="code-string">"rate-limited"</span>,
+    chaos=[llm_rate_limit()],
+)</pre>
+                    <p class="empty-text">Then run:</p>
+                    <code class="empty-code">uv run agent-chaos run scenarios/</code>
                 </div>
             </div>
         </section>
