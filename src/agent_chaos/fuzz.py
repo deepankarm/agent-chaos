@@ -427,7 +427,7 @@ def fuzz_chaos(
             ),
         )
     """
-    from agent_chaos.scenario.model import Scenario as ScenarioClass
+    from agent_chaos.scenario.model import BaselineScenario, ChaosScenario
 
     space = space or ChaosSpace.default()
 
@@ -442,6 +442,11 @@ def fuzz_chaos(
         raise ValueError("Scenario must have at least one turn to fuzz")
 
     scenarios: list[Scenario] = []
+
+    # Get base chaos (empty for BaselineScenario)
+    base_chaos = scenario.chaos if isinstance(scenario, ChaosScenario) else []
+    # Get parent name (for ChaosScenario use its parent, for BaselineScenario use its name)
+    parent_name = scenario.parent if isinstance(scenario, ChaosScenario) else scenario.name
 
     for i in range(n):
         # Generate random chaos for this variation
@@ -459,16 +464,17 @@ def fuzz_chaos(
             f"Chaos:\n{chaos_bullets}"
         )
 
-        # Create the fuzzed scenario
-        fuzzed = ScenarioClass(
+        # Create the fuzzed scenario as ChaosScenario
+        fuzzed = ChaosScenario(
             name=f"{scenario.name}--fuzz-{i}",
             description=description,
             agent=scenario.agent,
             turns=deepcopy(scenario.turns),  # Deep copy to avoid mutation
-            chaos=list(scenario.chaos) + chaos_list,  # Base chaos + fuzzed chaos
+            chaos=list(base_chaos) + chaos_list,  # Base chaos + fuzzed chaos
             providers=scenario.providers,
             assertions=list(scenario.assertions),
             tags=list(scenario.tags) + [tag],
+            parent=parent_name,
         )
 
         scenarios.append(fuzzed)
