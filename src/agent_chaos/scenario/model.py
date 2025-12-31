@@ -30,6 +30,9 @@ class TurnResult:
         chaos: Turn-scoped chaos that was injected during this turn.
         assertion_results: Results of turn-scoped assertions.
         is_dynamic: Whether this turn used dynamic input.
+        input_tokens: Total input tokens consumed during this turn.
+        output_tokens: Total output tokens generated during this turn.
+        total_tokens: Total tokens (input + output) for this turn.
     """
 
     turn_number: int
@@ -42,6 +45,9 @@ class TurnResult:
     chaos: list[dict[str, Any]] = field(default_factory=list)
     assertion_results: list["AssertionResult"] = field(default_factory=list)
     is_dynamic: bool = False
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
 
 # Type alias for dynamic turn input generators

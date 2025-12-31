@@ -356,6 +356,12 @@ def run_scenario(
                 "turns_failed": sum(1 for tr in ctx.turn_results if not tr.success),
                 # Scenario-level chaos config (for UI)
                 "scenario_chaos": scenario_chaos_config,
+                # Token usage stats
+                "total_input_tokens": ctx.metrics.total_input_tokens,
+                "total_output_tokens": ctx.metrics.total_output_tokens,
+                "total_tokens": ctx.metrics.total_tokens,
+                "avg_tokens_per_call": ctx.metrics.avg_tokens_per_call,
+                "max_tokens_single_call": ctx.metrics.max_tokens_single_call,
             }
         # Store ctx values before exiting the with block
         agent_input = ctx.agent_input
@@ -382,6 +388,10 @@ def run_scenario(
                     }
                     for ar in getattr(tr, "assertion_results", [])
                 ],
+                # Token usage per turn
+                "input_tokens": getattr(tr, "input_tokens", 0),
+                "output_tokens": getattr(tr, "output_tokens", 0),
+                "total_tokens": getattr(tr, "total_tokens", 0),
             }
             for tr in ctx.turn_results
         ]

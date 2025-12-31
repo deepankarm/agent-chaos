@@ -23,6 +23,15 @@ from agent_chaos.scenario.assertions import (
     TurnCompletesWithin,
     TurnMaxLLMCalls,
     TurnResponseContains,
+    # Token-based assertions
+    MaxTokens,
+    MaxInputTokens,
+    MaxOutputTokens,
+    MaxTokensPerCall,
+    MaxInputTokensPerCall,
+    MaxOutputTokensPerCall,
+    MaxTokensPerTurn,
+    TokenBurstDetection,
 )
 from agent_chaos.scenario.model import Scenario, Turn, TurnResult
 from agent_chaos.scenario.report import RunReport
@@ -50,4 +59,13 @@ __all__ = [
     "AllTurnsComplete",
     "RecoveredAfterFailure",
     "MaxTotalLLMCalls",
+    # Token-based assertions
+    "MaxTokens",
+    "MaxInputTokens",
+    "MaxOutputTokens",
+    "MaxTokensPerCall",
+    "MaxInputTokensPerCall",
+    "MaxOutputTokensPerCall",
+    "MaxTokensPerTurn",
+    "TokenBurstDetection",
 ]

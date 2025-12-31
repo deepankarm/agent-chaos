@@ -42,6 +42,9 @@ class MetricsStore:
     _start_time: float = field(default_factory=time.monotonic)
     _user_message_recorded: bool = False
     _current_turn: int = 0  # Current turn number (0 = no turn)
+    # Cumulative token tracking (for UI display)
+    _cumulative_input_tokens: int = 0
+    _cumulative_output_tokens: int = 0
 
     def set_event_bus(self, event_bus: EventBus):
         """Set the event bus for real-time UI updates."""
@@ -82,6 +85,13 @@ class MetricsStore:
         # Auto-add turn_number for relevant entry types if we're in a turn
         if self._current_turn > 0 and entry_type in ("chaos", "tool_call", "tool_result"):
             entry["turn_number"] = self._current_turn
+
+        # Add cumulative token counts for user/assistant messages
+        if entry_type == "user":
+            entry["cumulative_input_tokens"] = self._cumulative_input_tokens
+        elif entry_type == "assistant":
+            entry["cumulative_output_tokens"] = self._cumulative_output_tokens
+            entry["cumulative_input_tokens"] = self._cumulative_input_tokens
 
         entry.update(kwargs)
         self.conversation.append(entry)
@@ -296,12 +306,18 @@ class MetricsStore:
         usage: dict[str, Any] = {}
         if input_tokens is not None:
             usage["input_tokens"] = input_tokens
+            self._cumulative_input_tokens += input_tokens
         if output_tokens is not None:
             usage["output_tokens"] = output_tokens
+            self._cumulative_output_tokens += output_tokens
         if total_tokens is not None:
             usage["total_tokens"] = total_tokens
         if model is not None:
             usage["model"] = model
+
+        # Store cumulative totals at this point for UI display
+        usage["cumulative_input_tokens"] = self._cumulative_input_tokens
+        usage["cumulative_output_tokens"] = self._cumulative_output_tokens
 
         if call_id in self._active_calls:
             self._active_calls[call_id]["usage"] = {
@@ -732,3 +748,76 @@ class MetricsStore:
         if not self._ttft_times:
             return 0.0
         return sum(self._ttft_times) / len(self._ttft_times)
+
+    # -------------------------------------------------------------------------
+    # Token Aggregation Properties
+    # -------------------------------------------------------------------------
+    @property
+    def total_input_tokens(self) -> int:
+        """Total input tokens across all completed calls."""
+        total = 0
+        for call in self.call_history:
+            usage = call.get("usage") or {}
+            total += usage.get("input_tokens") or 0
+        return total
+
+    @property
+    def total_output_tokens(self) -> int:
+        """Total output tokens across all completed calls."""
+        total = 0
+        for call in self.call_history:
+            usage = call.get("usage") or {}
+            total += usage.get("output_tokens") or 0
+        return total
+
+    @property
+    def total_tokens(self) -> int:
+        """Total tokens (input + output) across all completed calls."""
+        return self.total_input_tokens + self.total_output_tokens
+
+    @property
+    def avg_tokens_per_call(self) -> float:
+        """Average total tokens per call."""
+        if not self.call_history:
+            return 0.0
+        return self.total_tokens / len(self.call_history)
+
+    @property
+    def max_tokens_single_call(self) -> int:
+        """Maximum tokens consumed in a single call (for burst detection)."""
+        max_tokens = 0
+        for call in self.call_history:
+            usage = call.get("usage") or {}
+            input_tok = usage.get("input_tokens") or 0
+            output_tok = usage.get("output_tokens") or 0
+            call_tokens = input_tok + output_tok
+            if call_tokens > max_tokens:
+                max_tokens = call_tokens
+        return max_tokens
+
+    def get_token_history(self) -> list[dict[str, Any]]:
+        """Get token usage history per call for burst analysis.
+
+        Returns a list of dicts with:
+            - call_id: str
+            - input_tokens: int
+            - output_tokens: int
+            - total_tokens: int
+            - cumulative_tokens: int (running total)
+        """
+        history = []
+        cumulative = 0
+        for call in self.call_history:
+            usage = call.get("usage") or {}
+            input_tok = usage.get("input_tokens") or 0
+            output_tok = usage.get("output_tokens") or 0
+            total = input_tok + output_tok
+            cumulative += total
+            history.append({
+                "call_id": call.get("call_id", ""),
+                "input_tokens": input_tok,
+                "output_tokens": output_tok,
+                "total_tokens": total,
+                "cumulative_tokens": cumulative,
+            })
+        return history
