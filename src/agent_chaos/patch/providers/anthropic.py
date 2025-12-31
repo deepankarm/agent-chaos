@@ -788,6 +788,12 @@ def _mutate_anthropic_tool_results(
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id", "")
+
+                        # Skip already-mutated tool results to avoid duplicate events
+                        if injector.is_tool_already_mutated(tool_use_id):
+                            mutated_content.append(block)
+                            continue
+
                         # Look up the actual tool name from the mapping
                         tool_name = tool_id_to_name.get(tool_use_id, tool_use_id)
                         original_result = block.get("content", "")
@@ -802,6 +808,8 @@ def _mutate_anthropic_tool_results(
                             chaos_result, chaos_obj = result
                             if chaos_result.mutated is not None:
                                 block = {**block, "content": chaos_result.mutated}
+                                # Mark as mutated to avoid reprocessing
+                                injector.mark_tool_mutated(tool_use_id)
                                 # Extract function metadata for UI
                                 chaos_fn_name = None
                                 chaos_fn_doc = None

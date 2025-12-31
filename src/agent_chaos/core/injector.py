@@ -50,6 +50,9 @@ class ChaosInjector:
         self._current_turn: int = 0
         self._completed_turns: int = 0
 
+        # Track already-mutated tool_use_ids to avoid duplicate processing
+        self._mutated_tool_ids: set[str] = set()
+
     def set_context(self, ctx: ChaosContext) -> None:
         """Set the ChaosContext reference for advanced chaos functions."""
         self._ctx = ctx
@@ -177,6 +180,14 @@ class ChaosInjector:
     def should_mutate_tools(self) -> bool:
         """Check if tool mutations should be applied."""
         return bool(self._tool_chaos)
+
+    def is_tool_already_mutated(self, tool_use_id: str) -> bool:
+        """Check if a tool_use_id has already been mutated."""
+        return tool_use_id in self._mutated_tool_ids
+
+    def mark_tool_mutated(self, tool_use_id: str) -> None:
+        """Mark a tool_use_id as mutated to avoid duplicate processing."""
+        self._mutated_tool_ids.add(tool_use_id)
 
     def get_tool_mutation(self, tool_name: str) -> None:
         """Get mutation for a specific tool (legacy interface, returns None)."""
