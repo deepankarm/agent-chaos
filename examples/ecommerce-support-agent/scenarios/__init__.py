@@ -1,56 +1,36 @@
-"""E-commerce Support Agent Chaos Scenarios.
+"""E-commerce Support Agent Scenarios.
 
-Chaos Engineering for AI Agents: 10 production-critical scenarios that answer
-business questions, not just test technical capabilities.
+This package provides chaos engineering scenarios for testing an
+e-commerce customer support agent.
 
-Categories:
-- LLM Call Chaos (3): Rate limits, 500 errors, call bounds
-- LLM Stream Chaos (0): [TODO - needs streaming agent implementation]
-- Tool Chaos (5): Errors, timeouts, semantic corruption, retry storms, cascades
-- User Input Chaos (2): Prompt injection, user frustration
+**Quick Start** (~3 min):
+    uv run agent-chaos run examples/ecommerce-support-agent/scenarios/quickstart.py
 
-Key features:
-- LLM-powered semantic mutations for tool data corruption
-- LLM-generated dynamic user inputs for multi-turn scenarios
-- Each scenario maps to a real production incident
+**Resilience Testing** (~10 min):
+    uv run agent-chaos run examples/ecommerce-support-agent/scenarios/resilience.py
 
-Each scenario maps to a real production incident that would bite an enterprise.
+**Automated Fuzzing** (~15 min):
+    uv run agent-chaos run examples/ecommerce-support-agent/scenarios/fuzzing.py
+
+**All Scenarios**:
+    uv run agent-chaos run examples/ecommerce-support-agent/scenarios/
+
+Structure:
+- baselines.py: Shared baseline experiments (customer_journey, frustrated_customer)
+- quickstart.py: First chaos tests - see the basics
+- resilience.py: Production failure modes - LLM, tool, user input resilience
+- fuzzing.py: Automated chaos discovery with ChaosSpace
 """
 
-from .chaos_scenarios import (
-    chaos_scenarios,
-    llm_call_scenarios,
-    stream_chaos_scenarios,
-    tool_chaos_scenarios,
-    user_input_scenarios,
-)
+from .quickstart import get_scenarios as get_quickstart_scenarios
+from .resilience import get_scenarios as get_resilience_scenarios
+from .fuzzing import get_scenarios as get_fuzzing_scenarios
 
 
 def get_scenarios():
-    """Return all 10 chaos engineering scenarios.
-
-    These scenarios test:
-    1. LLM rate limit recovery - Does retry/fallback work?
-    2. LLM 500 error handling - Graceful message or raw error?
-    3. LLM call bounds - Cost control, no spiraling
-    4. Tool error no false promises - Don't claim success on failure
-    5. Tool timeout bounded wait - Don't wait forever
-    6. Tool semantic corruption - Catch LLM-generated bad data
-    7. Tool retry storm prevention - Bound retries when user insists (LLM-generated)
-    8. Tool cascading failure - Escalate on major outage
-    9. Adversarial prompt injection - Stay on topic, no leaks
-    10. User frustration handling - Maintain professionalism (LLM-generated)
-
-    Stream chaos scenarios (TTFT, hang) require streaming agent - TODO.
-    """
-    return chaos_scenarios
-
-
-__all__ = [
-    "get_scenarios",
-    "chaos_scenarios",
-    "llm_call_scenarios",
-    "stream_chaos_scenarios",
-    "tool_chaos_scenarios",
-    "user_input_scenarios",
-]
+    """Return all scenarios (quickstart + resilience + fuzzing)."""
+    return (
+        get_quickstart_scenarios()
+        + get_resilience_scenarios()
+        + get_fuzzing_scenarios()
+    )

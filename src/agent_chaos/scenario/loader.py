@@ -19,12 +19,53 @@ from agent_chaos.scenario.model import Scenario
 
 
 def _load_module_from_file(path: Path) -> ModuleType:
-    """Load a scenario module from a file path via importlib."""
+    """Load a scenario module from a file path via importlib.
+
+    If the file is part of a Python package (parent has __init__.py),
+    it will be loaded as a proper submodule so relative imports work.
+    """
+    path = path.resolve()
     cwd = str(Path.cwd().resolve())
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # Use a unique name to avoid collisions when loading files with the same stem.
+    # Check if this file is part of a package (parent has __init__.py)
+    parent_dir = path.parent
+    init_file = parent_dir / "__init__.py"
+
+    if init_file.exists():
+        # This is a package - load it properly so relative imports work
+        package_name = parent_dir.name
+        module_name = f"{package_name}.{path.stem}"
+
+        # Add the package's parent to sys.path
+        grandparent = str(parent_dir.parent.resolve())
+        if grandparent not in sys.path:
+            sys.path.insert(0, grandparent)
+
+        # First ensure the package itself is loaded
+        if package_name not in sys.modules:
+            try:
+                importlib.import_module(package_name)
+            except ImportError:
+                pass  # Package might not be importable yet, continue anyway
+
+        # Now load the submodule
+        spec = importlib.util.spec_from_file_location(
+            module_name,
+            str(path),
+            submodule_search_locations=[str(parent_dir)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Failed to create module spec for scenario: {path}")
+
+        module = importlib.util.module_from_spec(spec)
+        module.__package__ = package_name
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)  # type: ignore[attr-defined]
+        return module
+
+    # Not part of a package - use standalone loading
     suffix = f"{abs(hash(str(path))) & 0xFFFFFFFF:x}"
     module_name = f"agent_chaos_scenario_{path.stem}_{suffix}"
 

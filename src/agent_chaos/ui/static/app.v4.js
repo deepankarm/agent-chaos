@@ -18,7 +18,7 @@ const state = {
     viewMode: localStorage.getItem('viewMode') || 'grid', // 'grid' or 'list'
     sortColumn: 'timestamp', // default sort by time
     sortDirection: 'desc', // 'asc' or 'desc'
-    groupByTags: localStorage.getItem('groupByTags') === 'true', // Group scenarios by tags
+    groupByTags: localStorage.getItem('groupByTags') !== 'false', // Group scenarios by tags (default: true)
     collapsedGroups: new Set(), // Track collapsed tag groups
 };
 
