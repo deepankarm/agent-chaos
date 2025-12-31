@@ -1,6 +1,6 @@
 [project]
 name = "agent-chaos"
-version = "0.1.1"
+version = "0.1.2"
 description = "Chaos Engineering for AI Agents"
 readme = "README.md"
 authors = [
