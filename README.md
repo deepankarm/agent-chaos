@@ -2,7 +2,7 @@
 
 # agent-chaos
 
-<img src="src/agent_chaos/ui/static/favicon.svg" width="200" height="200" alt="agent-chaos logo">
+<img src="src/agent_chaos/ui/static/favicon.svg" width="128" height="128" alt="agent-chaos logo">
 
 **Chaos engineering for AI agents.**
 
@@ -14,7 +14,7 @@
 
 Your agent works in demos. It passes evals. Then it hits production: the LLM rate-limits, the tool API returns garbage, the stream cuts mid-response. The agent fails silently, confidently returns wrong answers, or loops forever.
 
-**agent-chaos** breaks your agent on purpose, before production does.
+**agent-chaos** breaks your agent on purpose, before production does. For teams building agents for production, not demos.
 
 ```bash
 pip install agent-chaos
@@ -142,17 +142,17 @@ uv run agent-chaos run scenarios/quickstart.py
 uv run agent-chaos ui .agent_chaos_runs
 ```
 
+**Scenario overview showing baselines, chaos variants, and assertion results:**
+
 ![All scenarios](.github/images/all%20scenarios.png)
+
+**LLM rate limit injected on turn 1. Agent failed to respond, caught by turn-coherence assertion:**
 
 ![Rate limit injected](.github/images/rate-limit-injected.png)
 
+**Tool error injected. Agent gracefully handles the failure and offers alternatives:**
+
 ![Tool error injected](.github/images/tool-error-injected.png)
-
----
-
-## Who is this for?
-
-Teams building agents for production, not demos. If your agent needs to handle real users and real failures, this is for you.
 
 ---
 
