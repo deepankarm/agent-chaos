@@ -12,7 +12,7 @@
 
 ---
 
-Your agent works in demos. It passes evals. Then it hits production: the LLM rate-limits, the tool API returns garbage, the stream cuts mid-response. The agent fails silently, confidently returns wrong answers, or loops forever.
+Your agent works in demos. It passes evals. Then it hits production: the LLM sends a 500, the tool returns garbage, the stream cuts mid-response. The agent fails silently, confidently returns wrong answers, or loops forever.
 
 **agent-chaos** breaks your agent on purpose, before production does. For teams building agents for production, not demos.
 
