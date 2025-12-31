@@ -1174,6 +1174,19 @@ function renderConversationEntry(entry, index) {
                 </div>
             `;
 
+        case 'system':
+            return `
+                <div class="timeline-row system">
+                    <div class="time-gutter"></div>
+                    <div class="timeline-content">
+                        <div class="message-bubble system-prompt">
+                            <div class="message-label">SYSTEM PROMPT</div>
+                            <div class="message-text">${escapeHtml(entry.content)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
         case 'user':
             const dynamicBadge = entry.is_dynamic ? '<span class="dynamic-badge">λ</span>' : '';
             const turnLabel = entry.turn_number ? `<span class="turn-indicator">T${entry.turn_number}</span>` : '';

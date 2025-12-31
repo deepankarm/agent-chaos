@@ -368,6 +368,8 @@ def run_scenario(
                 "total_tokens": ctx.metrics.total_tokens,
                 "avg_tokens_per_call": ctx.metrics.avg_tokens_per_call,
                 "max_tokens_single_call": ctx.metrics.max_tokens_single_call,
+                # System prompt (captured from first LLM call)
+                "system_prompt": ctx.metrics.system_prompt,
             }
         # Store ctx values before exiting the with block
         agent_input = ctx.agent_input

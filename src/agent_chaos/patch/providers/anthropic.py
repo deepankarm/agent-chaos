@@ -84,8 +84,9 @@ class AnthropicPatcher(BaseProviderPatcher):
                 call_id = metrics.start_call("anthropic")
                 call_number = injector.increment_call()
 
-                # Apply user input chaos on FIRST call only
+                # Capture system prompt and apply user input chaos on FIRST call only
                 if call_number == 1:
+                    _maybe_record_system_prompt(kwargs, metrics)
                     messages = kwargs.get("messages", [])
                     if messages:
                         mutated_messages, original_input = (
@@ -153,8 +154,9 @@ class AnthropicPatcher(BaseProviderPatcher):
             call_number = injector.increment_call()
             is_streaming = kwargs.get("stream", False)
 
-            # Apply user input chaos on FIRST call only
+            # Capture system prompt and apply user input chaos on FIRST call only
             if call_number == 1:
+                _maybe_record_system_prompt(kwargs, metrics)
                 messages = kwargs.get("messages", [])
                 if messages:
                     mutated_messages, original_input = _apply_user_chaos_to_messages(
@@ -213,8 +215,9 @@ class AnthropicPatcher(BaseProviderPatcher):
                 call_id = metrics.start_call("anthropic")
                 call_number = injector.increment_call()
 
-                # Apply user input chaos on FIRST call only
+                # Capture system prompt and apply user input chaos on FIRST call only
                 if call_number == 1:
+                    _maybe_record_system_prompt(kwargs, metrics)
                     messages = kwargs.get("messages", [])
                     if messages:
                         mutated_messages, original_input = (
@@ -252,6 +255,15 @@ class AnthropicPatcher(BaseProviderPatcher):
 # -----------------------------------------------------------------------------
 # Helper functions (Anthropic-specific)
 # -----------------------------------------------------------------------------
+
+
+def _maybe_record_system_prompt(
+    kwargs: dict, metrics: "MetricsStore"
+) -> None:
+    """Record system prompt from kwargs if present (only on first call)."""
+    system = kwargs.get("system")
+    if system is not None:
+        metrics.record_system_prompt(system)
 
 
 def _maybe_mutate_tools(
@@ -660,8 +672,9 @@ def _execute_with_chaos_sync(
 
     mutated_kwargs = kwargs
 
-    # Apply user input chaos on FIRST call only
+    # Capture system prompt and apply user input chaos on FIRST call only
     if call_number == 1:
+        _maybe_record_system_prompt(mutated_kwargs, metrics)
         messages = mutated_kwargs.get("messages", [])
         if messages:
             mutated_messages, original_input = _apply_user_chaos_to_messages(
@@ -716,8 +729,9 @@ async def _execute_with_chaos_async(
 
     mutated_kwargs = kwargs
 
-    # Apply user input chaos on FIRST call only
+    # Capture system prompt and apply user input chaos on FIRST call only
     if call_number == 1:
+        _maybe_record_system_prompt(mutated_kwargs, metrics)
         messages = mutated_kwargs.get("messages", [])
         if messages:
             mutated_messages, original_input = _apply_user_chaos_to_messages(

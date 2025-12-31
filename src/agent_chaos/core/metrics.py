@@ -45,6 +45,9 @@ class MetricsStore:
     # Cumulative token tracking (for UI display)
     _cumulative_input_tokens: int = 0
     _cumulative_output_tokens: int = 0
+    # System prompt (captured from first LLM call)
+    system_prompt: str | None = None
+    _system_prompt_recorded: bool = False
 
     def set_event_bus(self, event_bus: EventBus):
         """Set the event bus for real-time UI updates."""
@@ -66,6 +69,35 @@ class MetricsStore:
     def set_current_turn(self, turn_number: int) -> None:
         """Set the current turn number for conversation tracking."""
         self._current_turn = turn_number
+
+    def record_system_prompt(self, system_prompt: str | list[dict] | None) -> None:
+        """Record the system prompt from the first LLM call.
+
+        Only records once - subsequent calls are ignored.
+
+        Args:
+            system_prompt: The system prompt string, or list of content blocks (Anthropic format).
+        """
+        if self._system_prompt_recorded or system_prompt is None:
+            return
+
+        # Convert list format to string if needed (Anthropic can use list of blocks)
+        if isinstance(system_prompt, list):
+            texts = []
+            for block in system_prompt:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                elif isinstance(block, str):
+                    texts.append(block)
+            self.system_prompt = "\n".join(texts) if texts else None
+        else:
+            self.system_prompt = system_prompt
+
+        self._system_prompt_recorded = True
+
+        # Add to conversation as the first entry
+        if self.system_prompt:
+            self.add_conversation_entry("system", content=self.system_prompt)
 
     def add_conversation_entry(
         self,

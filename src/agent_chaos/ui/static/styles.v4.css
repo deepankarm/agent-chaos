@@ -1213,6 +1213,43 @@ body {
 .timeline-row.tool_result .time-gutter::after { background: var(--tool-teal); border-color: var(--tool-teal); }
 .timeline-row.chaos .time-gutter::after { background: var(--chaos-orange); border-color: var(--chaos-orange); }
 .timeline-row.error .time-gutter::after { background: var(--chaos-red); border-color: var(--chaos-red); }
+.timeline-row.system .time-gutter::after { background: var(--info-cyan); border-color: var(--info-cyan); }
+
+/* System prompt message - full width, distinct styling */
+.timeline-row.system .message-bubble {
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    border: 1px solid var(--info-cyan);
+    border-left: 3px solid var(--info-cyan);
+    max-width: 100%;
+}
+
+.timeline-row.system .message-label {
+    color: var(--info-cyan);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.timeline-row.system .message-label::before {
+    content: '⚙️';
+    font-size: 12px;
+}
+
+.timeline-row.system .message-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    max-height: 200px;
+    overflow-y: auto;
+}
 
 .time-label {
     font-size: 10px;
