@@ -125,13 +125,88 @@ class MinChaosInjected:
         chaos_injected = ctx.metrics.faults_injected
         count = len(chaos_injected)
         passed = count >= self.min_chaos
+
+        if passed:
+            message = f"chaos_injected={count} (min {self.min_chaos})"
+        else:
+            # Build diagnostic message explaining why chaos wasn't injected
+            message = self._build_diagnostic(ctx, count)
+
         return AssertionResult(
             name=self.name,
             passed=passed,
-            message=f"chaos_injected={count} (min {self.min_chaos})",
+            message=message,
             measured=count,
             expected=self.min_chaos,
         )
+
+    def _build_diagnostic(self, ctx: ChaosContext, injected_count: int) -> str:
+        """Build a helpful diagnostic message when chaos wasn't injected."""
+        lines = [f"chaos_injected={injected_count} (min {self.min_chaos})"]
+
+        # Get configured tool chaos
+        tool_chaos_configs = []
+        for chaos in ctx.injector._tool_chaos:
+            tool_name = getattr(chaos, "tool_name", None) or "all"
+            trigger = getattr(chaos, "_trigger", None)
+            on_turn = getattr(trigger, "on_turn", None) if trigger else None
+            tool_chaos_configs.append((tool_name, on_turn))
+
+        # Get actual tool calls from conversation
+        tool_calls_by_turn: dict[int, list[str]] = {}
+        for entry in ctx.metrics.conversation:
+            if entry.get("type") == "tool_call":
+                turn = entry.get("turn_number", 0)
+                tool = entry.get("tool_name", "unknown")
+                if turn not in tool_calls_by_turn:
+                    tool_calls_by_turn[turn] = []
+                tool_calls_by_turn[turn].append(tool)
+
+        if tool_chaos_configs:
+            lines.append("")
+            lines.append("Configured tool chaos:")
+            for tool_name, on_turn in tool_chaos_configs:
+                turn_info = f" on turn {on_turn} (0-indexed)" if on_turn is not None else ""
+                lines.append(f"  - tool '{tool_name}'{turn_info}")
+
+        if tool_calls_by_turn:
+            lines.append("")
+            lines.append("Actual tool calls:")
+            for turn in sorted(tool_calls_by_turn.keys()):
+                tools = tool_calls_by_turn[turn]
+                lines.append(f"  Turn {turn}: {', '.join(tools)}")
+
+        # Check for common issues
+        issues = []
+        for tool_name, on_turn in tool_chaos_configs:
+            if tool_name != "all":
+                # Check if tool was ever called
+                all_tools = [t for tools in tool_calls_by_turn.values() for t in tools]
+                if tool_name not in all_tools:
+                    # Check for similar names
+                    similar = [t for t in set(all_tools) if tool_name in t or t in tool_name]
+                    if similar:
+                        issues.append(f"Tool '{tool_name}' not called. Did you mean '{similar[0]}'?")
+                    else:
+                        issues.append(f"Tool '{tool_name}' was never called")
+                elif on_turn is not None:
+                    # Check if tool was called on wrong turn
+                    turns_with_tool = [t for t, tools in tool_calls_by_turn.items() if tool_name in tools]
+                    # Note: on_turn is 0-indexed, tool_calls_by_turn uses 1-indexed turns
+                    expected_turn_1indexed = on_turn + 1
+                    if expected_turn_1indexed not in turns_with_tool:
+                        issues.append(
+                            f"Tool '{tool_name}' called on turn(s) {turns_with_tool}, "
+                            f"but chaos configured for turn {on_turn} (0-indexed = turn {expected_turn_1indexed})"
+                        )
+
+        if issues:
+            lines.append("")
+            lines.append("Potential issues:")
+            for issue in issues:
+                lines.append(f"  ⚠ {issue}")
+
+        return "\n".join(lines)
 
 
 @dataclass
