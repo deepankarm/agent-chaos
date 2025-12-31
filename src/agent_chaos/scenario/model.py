@@ -1,6 +1,8 @@
 """Scenario model (Python-first).
 
-Scenario files are just Python modules exposing `scenario: Scenario`.
+Two scenario types enforce the baseline → chaos variant pattern:
+- BaselineScenario: Pure journey definition, NO chaos allowed
+- ChaosScenario: Chaos variant, created via BaselineScenario.variant()
 """
 
 from __future__ import annotations
@@ -19,11 +21,11 @@ if TYPE_CHECKING:
 class at:
     """Target chaos/assertions to a specific turn in a variant.
 
-    Used with Scenario.variant() to inject chaos or assertions
-    at specific turns without modifying the base scenario.
+    Used with BaselineScenario.variant() to inject chaos or assertions
+    at specific turns.
 
     Attributes:
-        turn: Turn index (0-based) or turn ID (if turns have IDs).
+        turn: Turn index (0-based).
         chaos: Chaos events to inject at this turn.
         assertions: Assertions to check after this turn.
 
@@ -37,7 +39,7 @@ class at:
         )
     """
 
-    turn: int | str
+    turn: int
     chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
     assertions: list[Any] = field(default_factory=list)
 
@@ -89,7 +91,7 @@ class Turn:
         input: Static string OR callable that receives conversation history.
             - String: Used directly as the turn input.
             - Callable: Receives list[TurnResult] and returns the input string.
-        chaos: Turn-scoped chaos (fires only during this turn).
+        chaos: Turn-scoped chaos (only valid in ChaosScenario).
         assertions: Turn-scoped assertions to validate after this turn.
 
     Example:
@@ -103,13 +105,6 @@ class Turn:
             return "Thanks for the help."
 
         Turn(input=follow_up)
-
-        # Turn with scoped chaos and assertions
-        Turn(
-            input="Process my refund please.",
-            chaos=[tool_error("timeout").for_tool("refund_service")],
-            assertions=[TurnCompletes()],
-        )
     """
 
     input: str | TurnInputGenerator
@@ -117,14 +112,7 @@ class Turn:
     assertions: list[Any] = field(default_factory=list)
 
     def get_input(self, history: list[TurnResult]) -> str:
-        """Resolve the input for this turn.
-
-        Args:
-            history: List of completed turn results.
-
-        Returns:
-            The input string for this turn.
-        """
+        """Resolve the input for this turn."""
         if callable(self.input):
             return self.input(history)
         return self.input
@@ -135,41 +123,44 @@ class Turn:
 
 
 @dataclass
-class Scenario:
-    """A single chaos scenario.
+class BaselineScenario:
+    """A baseline scenario - defines the journey WITHOUT chaos.
+
+    BaselineScenario represents the "happy path" - what the agent should do
+    under normal conditions. Use .variant() to create ChaosScenario instances
+    that test resilience under failure conditions.
 
     Attributes:
         name: Unique scenario name.
-        description: Human-readable description of what this scenario tests.
+        description: Human-readable description.
         agent: Callable that runs the agent under test.
             Signature: (ctx: ChaosContext, turn_input: str) -> str
         turns: List of turns defining the conversation flow.
-            The agent is called once per turn with the turn input.
-        chaos: Scenario-level chaos to inject (applies across all turns).
+            Turns in a BaselineScenario cannot have chaos.
         providers: Providers to patch. Defaults to ["anthropic"].
         assertions: Scenario-level assertions to validate contracts.
         tags: Optional list of tags for UI grouping and filtering.
+        meta: Optional metadata dictionary.
 
     Example:
-        from agent_chaos import llm_rate_limit, tool_error
-        from agent_chaos.scenario import Scenario, Turn, CompletesWithin
+        from agent_chaos import BaselineScenario, Turn
 
-        async def my_driver(ctx: ChaosContext, turn_input: str) -> str:
-            return await my_agent.run(turn_input)
-
-        scenario = Scenario(
-            name="support-flow",
-            description="Tests support agent handling escalating customers",
-            agent=my_driver,
+        customer_journey = BaselineScenario(
+            name="customer-journey",
+            description="Standard customer support flow",
+            agent=run_agent,
             turns=[
-                Turn("My order didn't arrive. I want a refund."),
-                Turn(
-                    input="Process it now!",
-                    chaos=[tool_error("timeout").for_tool("refund")],
-                ),
+                Turn("Check my order status"),
+                Turn("I want a refund"),
+                Turn("Process it please"),
             ],
-            chaos=[llm_rate_limit().on_turn(2).after_calls(2)],
-            assertions=[CompletesWithin(timeout_s=60.0)],
+            assertions=[CompletesSuccessfully()],
+        )
+
+        # Create chaos variants
+        llm_fails = customer_journey.variant(
+            name="customer-journey-llm-fails",
+            chaos=[llm_error().after_calls(2)],
         )
     """
 
@@ -177,10 +168,21 @@ class Scenario:
     description: str
     agent: Callable[..., Any]
     turns: list[Turn]
-    chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
     providers: list[str] = field(default_factory=lambda: ["anthropic"])
     assertions: list[Any] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    # NO chaos field - enforced by design
+
+    def __post_init__(self) -> None:
+        """Validate that no turns have chaos."""
+        for i, turn in enumerate(self.turns):
+            if turn.chaos:
+                raise ValueError(
+                    f"BaselineScenario '{self.name}' cannot have chaos in turns. "
+                    f"Turn {i} has chaos defined. Use .variant() to add chaos."
+                )
 
     def variant(
         self,
@@ -191,74 +193,121 @@ class Scenario:
         assertions: list[Any] | None = None,
         turns: list[at] | None = None,
         tags: list[str] | None = None,
-    ) -> "Scenario":
-        """Create a variant of this scenario with additional chaos/assertions.
+    ) -> "ChaosScenario":
+        """Create a chaos variant of this baseline.
 
-        This method creates a new scenario based on the current one, allowing
+        This method creates a ChaosScenario based on this baseline, allowing
         you to test the same agent journey under different failure conditions.
 
         Args:
-            name: Name for the variant scenario.
+            name: Name for the chaos variant.
             description: Optional description (defaults to parent's).
-            chaos: Additional scenario-level chaos (appended to parent's).
-            assertions: Additional scenario-level assertions (appended to parent's).
-            turns: List of `at()` objects specifying turn-level modifications.
+            chaos: Scenario-level chaos to inject.
+            assertions: Additional assertions (appended to parent's).
+            turns: List of `at()` objects specifying turn-level chaos/assertions.
             tags: Additional tags (appended to parent's).
 
         Returns:
-            A new Scenario with the modifications applied.
+            A new ChaosScenario with chaos applied.
 
         Example:
-            baseline = Scenario(
-                name="customer-journey",
-                agent=run_agent,
-                turns=[
-                    Turn("Check order status"),
-                    Turn("Get shipping info"),
-                    Turn("Request refund"),
-                ],
+            # Turn-level chaos
+            tool_fails = baseline.variant(
+                name="tool-timeout",
+                turns=[at(2, chaos=[tool_error().for_tool("refund")])],
             )
 
-            # Create a variant where refund service fails
-            refund_fails = baseline.variant(
-                name="refund-service-down",
-                description="Refund tool fails on turn 3",
-                chaos=[llm_rate_limit().after_calls(5)],
-                turns=[
-                    at(2, chaos=[tool_error().for_tool("process_refund")]),
-                ],
-                assertions=[error_handling_metric],
+            # Global chaos
+            llm_fails = baseline.variant(
+                name="llm-rate-limited",
+                chaos=[llm_rate_limit().after_calls(3)],
+            )
+
+            # Both
+            combined = baseline.variant(
+                name="chaos-storm",
+                chaos=[llm_error()],
+                turns=[at(1, chaos=[tool_timeout()])],
+                assertions=[ErrorHandledGracefully()],
             )
         """
         # Build turn modifications lookup: {turn_index: at(...)}
-        turn_mods: dict[int | str, at] = {}
+        turn_mods: dict[int, at] = {}
         for mod in turns or []:
             turn_mods[mod.turn] = mod
 
-        # Deep copy turns with modifications applied
+        # Create turns with chaos applied from at() specs
         new_turns = []
         for i, turn in enumerate(self.turns):
             mod = turn_mods.get(i)
             if mod:
-                # Merge chaos and assertions
+                # Add chaos and assertions from at() spec
                 new_turns.append(
                     Turn(
                         input=turn.input,
-                        chaos=list(turn.chaos) + list(mod.chaos),
+                        chaos=list(mod.chaos),
                         assertions=list(turn.assertions) + list(mod.assertions),
                     )
                 )
             else:
-                # Keep original turn (no copy needed, turns are immutable-ish)
-                new_turns.append(turn)
+                # Copy turn without chaos
+                new_turns.append(
+                    Turn(
+                        input=turn.input,
+                        chaos=[],
+                        assertions=list(turn.assertions),
+                    )
+                )
 
-        return Scenario(
+        return ChaosScenario(
             name=name,
             description=description or self.description,
             agent=self.agent,
             turns=new_turns,
-            chaos=list(self.chaos) + (chaos or []),
+            chaos=chaos or [],
             providers=list(self.providers),
             assertions=list(self.assertions) + (assertions or []),
             tags=list(self.tags) + (tags or []),
+            parent=self.name,
         )
+
+
+@dataclass
+class ChaosScenario:
+    """A chaos scenario - tests resilience under failure conditions.
+
+    ChaosScenario is typically created via BaselineScenario.variant(),
+    though it can be constructed directly for advanced use cases.
+
+    Attributes:
+        name: Unique scenario name.
+        description: Human-readable description.
+        agent: Callable that runs the agent under test.
+        turns: List of turns (can have chaos).
+        chaos: Scenario-level chaos to inject.
+        providers: Providers to patch.
+        assertions: Scenario-level assertions.
+        tags: Optional list of tags.
+        parent: Name of the parent BaselineScenario.
+
+    Note:
+        ChaosScenario does not have a variant() method.
+        Chaos variants should derive from BaselineScenario only,
+        keeping the hierarchy flat: Baseline → Variant(s).
+    """
+
+    name: str
+    description: str
+    agent: Callable[..., Any]
+    turns: list[Turn]
+    chaos: list[Chaos | ChaosBuilder] = field(default_factory=list)
+    providers: list[str] = field(default_factory=lambda: ["anthropic"])
+    assertions: list[Any] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    parent: str = ""
+
+    # NO variant() method - flat hierarchy only
+
+
+# Type alias for runner compatibility
+Scenario = BaselineScenario | ChaosScenario

@@ -11,7 +11,7 @@ from typing import Any
 from agent_chaos.core.context import ChaosContext, chaos_context
 from agent_chaos.event.jsonl import JsonlEventSink
 from agent_chaos.scenario.assertions import AssertionResult
-from agent_chaos.scenario.model import Scenario, Turn
+from agent_chaos.scenario.model import BaselineScenario, ChaosScenario, Scenario, Turn
 from agent_chaos.scenario.report import RunReport
 
 
@@ -175,6 +175,9 @@ def _get_turn_chaos_config(turn: Turn) -> list[dict[str, Any]]:
 
 def _get_scenario_chaos_config(scenario: Scenario) -> list[dict[str, Any]]:
     """Extract chaos configuration from a scenario for UI display."""
+    # BaselineScenario has no chaos field
+    if isinstance(scenario, BaselineScenario):
+        return []
     return [_extract_chaos_config(chaos) for chaos in scenario.chaos]
 
 
@@ -300,11 +303,14 @@ def run_scenario(
     assertion_results: list[AssertionResult] = []
     trace_id: str = ""
 
+    # Get chaos list (empty for BaselineScenario)
+    scenario_chaos = scenario.chaos if isinstance(scenario, ChaosScenario) else []
+
     try:
         with chaos_context(
             name=scenario.name,
             description=scenario.description,
-            chaos=scenario.chaos,
+            chaos=scenario_chaos,
             providers=scenario.providers,
             emit_events=False,
             event_sink=event_sink,
@@ -413,6 +419,12 @@ def run_scenario(
             "error": error,
         }
 
+    # Build meta dict - ChaosScenario uses parent field, BaselineScenario uses meta
+    if isinstance(scenario, ChaosScenario):
+        report_meta = {"_parent": scenario.parent} if scenario.parent else {}
+    else:
+        report_meta = scenario.meta
+
     report = RunReport(
         scenario_name=scenario.name,
         trace_id=trace_id,
@@ -423,6 +435,7 @@ def run_scenario(
         error=scorecard.get("error"),
         scorecard=scorecard,
         tags=scenario.tags,
+        meta=report_meta,
         agent_input=agent_input,
         agent_output=agent_output,
         conversation=conversation,

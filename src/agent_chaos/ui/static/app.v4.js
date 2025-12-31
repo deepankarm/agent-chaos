@@ -12,13 +12,14 @@ const state = {
     traces: {},
     tracesHash: '',
     theme: localStorage.getItem('theme') || 'dark',
-    filter: 'all',
-    typeFilter: [], // Array of selected types: ['user_input', 'llm', 'stream', 'tool', 'context']
+    filter: localStorage.getItem('filter') || 'all',
+    typeFilter: JSON.parse(localStorage.getItem('typeFilter') || '[]'), // Array of selected types
     selectedTraceId: null,
     viewMode: localStorage.getItem('viewMode') || 'grid', // 'grid' or 'list'
     sortColumn: 'timestamp', // default sort by time
     sortDirection: 'desc', // 'asc' or 'desc'
     groupByTags: localStorage.getItem('groupByTags') !== 'false', // Group scenarios by tags (default: true)
+    groupMode: localStorage.getItem('groupMode') || 'parent', // 'tags' or 'parent' (default: parent)
     collapsedGroups: new Set(), // Track collapsed tag groups
 };
 
@@ -406,11 +407,15 @@ function renderScenarioCard(trace) {
     const report = trace.report || {};
     const passed = trace.status === 'success' || report.passed;
     const isRunning = trace.status === 'running';
+    const isBaseline = trace._isBaseline;
+    const isVariant = getTraceParent(trace) !== null;
 
     let cardClass = 'scenario-card';
     if (isRunning) cardClass += ' running';
     else if (passed) cardClass += ' passed';
     else cardClass += ' failed';
+    if (isBaseline) cardClass += ' baseline';
+    if (isVariant) cardClass += ' variant';
 
     const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
     const assertions = report.assertion_results || [];
@@ -474,11 +479,15 @@ function renderScenarioListItem(trace) {
     const report = trace.report || {};
     const passed = trace.status === 'success' || report.passed;
     const isRunning = trace.status === 'running';
+    const isBaseline = trace._isBaseline;
+    const isVariant = getTraceParent(trace) !== null;
 
     let rowClass = 'scenario-list-item';
     if (isRunning) rowClass += ' running';
     else if (passed) rowClass += ' passed';
     else rowClass += ' failed';
+    if (isBaseline) rowClass += ' baseline';
+    if (isVariant) rowClass += ' variant';
 
     const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
     const assertions = report.assertion_results || [];
@@ -553,69 +562,100 @@ function renderScenarioListItem(trace) {
 // ============================================================
 // Filtering & Rendering
 // ============================================================
-function applyFilter(filter) {
-    state.filter = filter;
-    document.querySelectorAll('#filterTabs .filter-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.filter === filter);
+// ============================================================
+// Unified Filter Dropdown System
+// ============================================================
+function toggleFilterDropdown(dropdownId, triggerId) {
+    // Close all other dropdowns first
+    document.querySelectorAll('.filter-dropdown.open').forEach(d => {
+        if (d.id !== dropdownId) {
+            d.classList.remove('open');
+            const otherTrigger = d.previousElementSibling;
+            if (otherTrigger) otherTrigger.classList.remove('dropdown-open');
+        }
     });
-    renderScenarios();
-}
 
-function toggleTypeFilter(type) {
-    // Toggle - add if not present, remove if present
-    const index = state.typeFilter.indexOf(type);
-    if (index > -1) {
-        state.typeFilter.splice(index, 1);
-    } else {
-        state.typeFilter.push(type);
-    }
-    updateChaosTypeFilterUI();
-    renderScenarios();
-}
-
-function updateChaosTypeFilterUI() {
-    // Update checkboxes
-    document.querySelectorAll('#chaosTypeDropdown input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = state.typeFilter.includes(checkbox.dataset.type);
-    });
-    
-    // Update chips
-    const chipsContainer = document.getElementById('chaosTypeChips');
-    chipsContainer.innerHTML = '';
-    
-    state.typeFilter.forEach(type => {
-        const chip = document.createElement('span');
-        chip.className = 'chaos-type-chip';
-        chip.setAttribute('data-type', type);
-        chip.innerHTML = `${getChaosTypeLabel(type)} <span class="chip-remove" data-type="${type}">×</span>`;
-        chipsContainer.appendChild(chip);
-    });
-    
-    // Update dropdown trigger appearance
-    const trigger = document.getElementById('chaosTypeDropdownTrigger');
-    if (state.typeFilter.length > 0) {
-        trigger.classList.add('has-selection');
-    } else {
-        trigger.classList.remove('has-selection');
-    }
-}
-
-function toggleDropdown() {
-    const dropdown = document.getElementById('chaosTypeDropdown');
-    const trigger = document.getElementById('chaosTypeDropdownTrigger');
+    const dropdown = document.getElementById(dropdownId);
+    const trigger = document.getElementById(triggerId);
     const isOpen = dropdown.classList.toggle('open');
-    if (isOpen) {
-        trigger.classList.add('dropdown-open');
-    } else {
-        trigger.classList.remove('dropdown-open');
-    }
+    trigger.classList.toggle('dropdown-open', isOpen);
 }
 
-function closeDropdown() {
-    const dropdown = document.getElementById('chaosTypeDropdown');
+function closeAllDropdowns() {
+    document.querySelectorAll('.filter-dropdown.open').forEach(d => {
+        d.classList.remove('open');
+    });
+    document.querySelectorAll('.filter-dropdown-trigger.dropdown-open').forEach(t => {
+        t.classList.remove('dropdown-open');
+    });
+}
+
+// Status filter
+function setStatusFilter(filter) {
+    state.filter = filter;
+    localStorage.setItem('filter', filter);
+    updateStatusUI();
+    renderScenarios();
+    closeAllDropdowns();
+}
+
+function updateStatusUI() {
+    const trigger = document.getElementById('statusDropdownTrigger');
+    const label = document.getElementById('statusLabel');
+
+    // Update label - always show current selection
+    const labels = { all: 'All', passed: 'Passed', failed: 'Failed' };
+    label.textContent = labels[state.filter] || 'All';
+
+    // Button always looks active (blue) since there's always a selection
+    trigger.classList.add('active');
+
+    // Update options
+    document.querySelectorAll('#statusDropdown .filter-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.filter === state.filter);
+    });
+}
+
+// Chaos type filter
+function setChaosTypeFilter(type) {
+    if (type === 'all') {
+        state.typeFilter = [];
+    } else {
+        // Toggle - single select for simplicity
+        if (state.typeFilter.length === 1 && state.typeFilter[0] === type) {
+            state.typeFilter = [];
+        } else {
+            state.typeFilter = [type];
+        }
+    }
+    localStorage.setItem('typeFilter', JSON.stringify(state.typeFilter));
+    updateChaosTypeUI();
+    renderScenarios();
+    closeAllDropdowns();
+}
+
+function updateChaosTypeUI() {
     const trigger = document.getElementById('chaosTypeDropdownTrigger');
-    dropdown.classList.remove('open');
-    trigger.classList.remove('dropdown-open');
+    const label = document.getElementById('chaosTypeLabel');
+
+    // Update label - always show current selection
+    if (state.typeFilter.length === 0) {
+        label.textContent = 'All Chaos Types';
+    } else {
+        label.textContent = getChaosTypeLabel(state.typeFilter[0]);
+    }
+
+    // Button always looks active (blue) since there's always a selection
+    trigger.classList.add('active');
+
+    // Update options
+    document.querySelectorAll('#chaosTypeDropdown .filter-option').forEach(opt => {
+        const isAll = opt.dataset.type === 'all';
+        const isActive = isAll
+            ? state.typeFilter.length === 0
+            : state.typeFilter.includes(opt.dataset.type);
+        opt.classList.toggle('active', isActive);
+    });
 }
 
 // ============================================================
@@ -657,18 +697,89 @@ function groupTracesByTag(traces) {
     return groups;
 }
 
-function toggleGroupByTags() {
-    state.groupByTags = !state.groupByTags;
-    localStorage.setItem('groupByTags', state.groupByTags);
-    updateGroupByTagsUI();
-    renderScenarios();
+function getTraceParent(trace) {
+    // Extract parent from trace report meta
+    const report = trace.report || {};
+    const meta = report.meta || {};
+    return meta._parent || null;
 }
 
-function updateGroupByTagsUI() {
-    const btn = document.getElementById('groupByTagsBtn');
-    if (btn) {
-        btn.classList.toggle('active', state.groupByTags);
+function groupTracesByParent(traces) {
+    // Group traces by their parent scenario
+    // Baselines (no parent) become their own group, with variants nested under them
+    const groups = {};
+
+    // First pass: identify all scenario names that are used as parents
+    const parentNames = new Set();
+    traces.forEach(t => {
+        const parent = getTraceParent(t);
+        if (parent) parentNames.add(parent);
+    });
+
+    // Second pass: group by parent
+    traces.forEach(t => {
+        const parent = getTraceParent(t);
+        // Use parent name if it exists, otherwise use own name (for baselines)
+        const groupKey = parent || t.name;
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(t);
+    });
+
+    // Sort each group: baselines first (no parent), then variants
+    // Also mark each trace with isBaseline flag for rendering
+    Object.keys(groups).forEach(key => {
+        groups[key].sort((a, b) => {
+            const aIsBaseline = !getTraceParent(a);
+            const bIsBaseline = !getTraceParent(b);
+            if (aIsBaseline && !bIsBaseline) return -1;
+            if (!aIsBaseline && bIsBaseline) return 1;
+            return 0;
+        });
+        // Mark baseline status on each trace for rendering
+        groups[key].forEach(t => {
+            t._isBaseline = !getTraceParent(t);
+        });
+    });
+
+    return groups;
+}
+
+function setGroupMode(mode) {
+    // mode is 'none', 'tags', or 'parent'
+    if (mode === 'none') {
+        state.groupByTags = false;
+        state.groupMode = 'parent'; // Default for next time
+    } else {
+        state.groupByTags = true;
+        state.groupMode = mode;
     }
+    localStorage.setItem('groupByTags', state.groupByTags);
+    localStorage.setItem('groupMode', state.groupMode);
+    updateGroupUI();
+    renderScenarios();
+    closeAllDropdowns();
+}
+
+function updateGroupUI() {
+    const trigger = document.getElementById('groupDropdownTrigger');
+    const label = document.getElementById('groupLabel');
+
+    // Update button label - always show current selection
+    if (state.groupByTags) {
+        const modeLabel = state.groupMode === 'parent' ? 'Parent' : 'Tags';
+        label.textContent = modeLabel;
+    } else {
+        label.textContent = 'None';
+    }
+
+    // Button always looks active (blue) since there's always a selection
+    trigger.classList.add('active');
+
+    // Update dropdown option active states
+    const currentMode = state.groupByTags ? state.groupMode : 'none';
+    document.querySelectorAll('#groupDropdown .filter-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.mode === currentMode);
+    });
 }
 
 function toggleTagGroup(tag) {
@@ -682,6 +793,11 @@ function toggleTagGroup(tag) {
 
 function renderTagGroup(tag, traces) {
     const isCollapsed = state.collapsedGroups.has(tag);
+    const isParentMode = state.groupMode === 'parent' && state.groupByTags;
+
+    // In parent mode, separate baseline from variants
+    const baseline = isParentMode ? traces.find(t => t._isBaseline) : null;
+    const variants = isParentMode ? traces.filter(t => !t._isBaseline) : traces;
 
     // Aggregate stats across all scenarios in this group
     let totalChaos = 0;
@@ -697,6 +813,75 @@ function renderTagGroup(tag, traces) {
         });
     });
 
+    // In parent mode, render baseline as the header
+    if (isParentMode && baseline) {
+        const report = baseline.report || {};
+        const passed = baseline.status === 'success' || report.passed;
+        const elapsedS = report.elapsed_s || report.scorecard?.elapsed_s;
+        const baselineChaos = baseline.fault_count || 0;
+        const baselineAssertions = report.assertion_results || [];
+        const baselinePassed = baselineAssertions.filter(a => a.passed).length;
+        const baselineFailed = baselineAssertions.filter(a => !a.passed).length;
+        const variantCount = variants.length;
+
+        // Variant stats summary
+        let variantsPassed = 0, variantsFailed = 0, variantsChaos = 0, variantsTotalTime = 0;
+        variants.forEach(v => {
+            if (v.status === 'success' || v.report?.passed) variantsPassed++;
+            else variantsFailed++;
+            variantsChaos += v.fault_count || 0;
+            variantsTotalTime += v.report?.elapsed_s || v.report?.scorecard?.elapsed_s || 0;
+        });
+
+        let scenariosHtml;
+        if (state.viewMode === 'list') {
+            scenariosHtml = variants.map(t => renderScenarioListItem(t)).join('');
+        } else {
+            scenariosHtml = variants.map(t => renderScenarioCard(t)).join('');
+        }
+
+        return `
+            <div class="tag-group parent-group ${isCollapsed ? 'collapsed' : ''}" data-tag="${escapeHtml(tag)}">
+                <div class="parent-group-header ${passed ? 'passed' : 'failed'}" data-trace-id="${baseline.trace_id}">
+                    <div class="parent-header-left" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                        <span class="tag-group-chevron">${isCollapsed ? '▶' : '▼'}</span>
+                        <span class="parent-name">${escapeHtml(baseline.name)}</span>
+                        <span class="outcome-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+                    </div>
+                    <div class="parent-stats-box baseline-stats">
+                        <span class="stats-label">baseline</span>
+                        <span class="stats-items">
+                            ${baselineChaos > 0 ? `<span class="stat-item chaos">⚡${baselineChaos}</span>` : '<span class="stat-item chaos dim">⚡0</span>'}
+                            <span class="stat-item pass">✓${baselinePassed}</span>
+                            ${baselineFailed > 0 ? `<span class="stat-item fail">✗${baselineFailed}</span>` : ''}
+                            <span class="stat-sep">|</span>
+                            <span class="stat-item duration">${elapsedS ? formatDuration(elapsedS) : '—'}</span>
+                        </span>
+                    </div>
+                    <div class="parent-stats-box variants-stats" onclick="toggleTagGroup('${escapeHtml(tag).replace(/'/g, "\\'")}')">
+                        <span class="stats-label">${variantCount} variant${variantCount !== 1 ? 's' : ''}</span>
+                        ${variantCount > 0 ? `<span class="stats-items">
+                            <span class="stat-item chaos">⚡${variantsChaos}</span>
+                            <span class="stat-item pass">✓${variantsPassed}</span>
+                            ${variantsFailed > 0 ? `<span class="stat-item fail">✗${variantsFailed}</span>` : ''}
+                            <span class="stat-sep">|</span>
+                            <span class="stat-item duration">${formatDuration(variantsTotalTime)}</span>
+                        </span>` : ''}
+                    </div>
+                    <button class="parent-expand-btn" onclick="event.stopPropagation(); openScenarioModal('${baseline.trace_id}')" title="View baseline details">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M4 1h8v2H6.414l5.293 5.293-1.414 1.414L5 4.414V8H3V1h1zm8 14H4v-2h5.586l-5.293-5.293 1.414-1.414L11 11.586V8h2v7h-1z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="tag-group-content ${state.viewMode === 'list' ? 'list-content' : 'grid-content'}">
+                    ${scenariosHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    // Default tag group rendering (for tag mode)
     let scenariosHtml;
     if (state.viewMode === 'list') {
         scenariosHtml = traces.map(t => renderScenarioListItem(t)).join('');
@@ -861,12 +1046,14 @@ function renderScenarios() {
             : '<span class="sort-icon active">↓</span>';
     };
 
-    // Render grouped by tags if enabled
+    // Render grouped if enabled
     if (state.groupByTags) {
-        const groups = groupTracesByTag(traces);
-        const tags = Object.keys(groups).sort();
+        const groups = state.groupMode === 'parent'
+            ? groupTracesByParent(traces)
+            : groupTracesByTag(traces);
+        const groupKeys = Object.keys(groups).sort();
 
-        grid.innerHTML = tags.map(tag => renderTagGroup(tag, groups[tag])).join('');
+        grid.innerHTML = groupKeys.map(key => renderTagGroup(key, groups[key])).join('');
 
         // Add click handlers for scenario cards/items within groups
         grid.querySelectorAll('.scenario-card').forEach(card => {
@@ -1495,15 +1682,23 @@ function renderSummarySections(trace) {
 function openScenarioModal(traceId) {
     const trace = state.traces[traceId];
     if (!trace) return;
-    
+
     state.selectedTraceId = traceId;
     const modal = document.getElementById('scenarioModal');
     const report = trace.report || {};
+    const meta = report.meta || {};
     const passed = trace.status === 'success' || report.passed;
     const description = trace.description || '';
-    
+    const parentName = meta._parent || null;
+
+    // Build title with optional "derived from" badge
+    const derivedBadge = parentName
+        ? `<span class="derived-badge" title="Derived from ${escapeHtml(parentName)}">↳ ${escapeHtml(parentName)}</span>`
+        : '';
+
     document.getElementById('modalTitle').innerHTML = `
         ${escapeHtml(trace.name)}
+        ${derivedBadge}
         <span class="outcome-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
     `;
     // Show trace_id and description together in subtitle - full text, no truncation
@@ -1651,52 +1846,41 @@ function init() {
     });
     updateViewToggleUI();
 
-    // Group by tags toggle
-    const groupByTagsBtn = document.getElementById('groupByTagsBtn');
-    if (groupByTagsBtn) {
-        groupByTagsBtn.addEventListener('click', toggleGroupByTags);
-    }
-    updateGroupByTagsUI();
-
-    // Pass/fail filter tabs
-    document.querySelectorAll('#filterTabs .filter-tab').forEach(tab => {
-        tab.addEventListener('click', () => applyFilter(tab.dataset.filter));
-    });
-    
-    // Chaos type dropdown
-    const dropdownTrigger = document.getElementById('chaosTypeDropdownTrigger');
-    const dropdown = document.getElementById('chaosTypeDropdown');
-    
-    dropdownTrigger.addEventListener('click', (e) => {
+    // Unified filter dropdowns
+    // Group dropdown
+    document.getElementById('groupDropdownTrigger').addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleDropdown();
+        toggleFilterDropdown('groupDropdown', 'groupDropdownTrigger');
     });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target) && !dropdownTrigger.contains(e.target)) {
-            closeDropdown();
-        }
+    document.querySelectorAll('#groupDropdown .filter-option').forEach(opt => {
+        opt.addEventListener('click', () => setGroupMode(opt.dataset.mode));
     });
-    
-    // Handle checkbox changes
-    document.querySelectorAll('#chaosTypeDropdown input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-            toggleTypeFilter(checkbox.dataset.type);
-        });
+
+    // Status dropdown
+    document.getElementById('statusDropdownTrigger').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFilterDropdown('statusDropdown', 'statusDropdownTrigger');
     });
-    
-    // Handle chip remove clicks
-    document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('chip-remove')) {
-            e.stopPropagation();
-            const type = e.target.dataset.type;
-            toggleTypeFilter(type);
-        }
+    document.querySelectorAll('#statusDropdown .filter-option').forEach(opt => {
+        opt.addEventListener('click', () => setStatusFilter(opt.dataset.filter));
     });
-    
+
+    // Chaos type dropdown
+    document.getElementById('chaosTypeDropdownTrigger').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFilterDropdown('chaosTypeDropdown', 'chaosTypeDropdownTrigger');
+    });
+    document.querySelectorAll('#chaosTypeDropdown .filter-option').forEach(opt => {
+        opt.addEventListener('click', () => setChaosTypeFilter(opt.dataset.type));
+    });
+
+    // Close all dropdowns when clicking outside
+    document.addEventListener('click', () => closeAllDropdowns());
+
     // Initialize UI
-    updateChaosTypeFilterUI();
+    updateGroupUI();
+    updateStatusUI();
+    updateChaosTypeUI();
     
     document.getElementById('modalClose').addEventListener('click', closeScenarioModal);
     document.getElementById('modalBackdrop').addEventListener('click', closeScenarioModal);

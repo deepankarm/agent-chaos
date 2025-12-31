@@ -22,12 +22,11 @@ These baselines are imported by quickstart.py, resilience.py, and fuzzing.py
 to create variants with different chaos injections.
 """
 
-from agent_chaos import Turn
+from agent_chaos import BaselineScenario, Turn
 from agent_chaos.scenario import (
     AllTurnsComplete,
     CompletesWithin,
     MaxTotalLLMCalls,
-    Scenario,
 )
 
 from agent import run_support_agent
@@ -47,7 +46,7 @@ from .commons import (
 _turn_health_check = [turn_coherence]
 
 # Baseline 1: Structured 5-turn customer journey
-customer_journey = Scenario(
+customer_journey = BaselineScenario(
     name="customer-journey",
     description="5-turn journey: order status → shipping → refund check → follow-up → escalation",
     agent=run_support_agent,
@@ -86,7 +85,7 @@ customer_journey = Scenario(
 )
 
 # Baseline 2: Frustrated customer with dynamic escalation
-frustrated_customer = Scenario(
+frustrated_customer = BaselineScenario(
     name="frustrated-customer",
     description="5-turn dynamic escalation with increasingly frustrated customer (LLM-generated)",
     agent=run_support_agent,

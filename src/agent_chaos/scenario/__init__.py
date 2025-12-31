@@ -33,13 +33,22 @@ from agent_chaos.scenario.assertions import (
     MaxTokensPerTurn,
     TokenBurstDetection,
 )
-from agent_chaos.scenario.model import Scenario, Turn, TurnResult, at
+from agent_chaos.scenario.model import (
+    BaselineScenario,
+    ChaosScenario,
+    Scenario,
+    Turn,
+    TurnResult,
+    at,
+)
 from agent_chaos.scenario.report import RunReport
 from agent_chaos.scenario.runner import run_scenario
 
 __all__ = [
     # Core
-    "Scenario",
+    "BaselineScenario",
+    "ChaosScenario",
+    "Scenario",  # Type alias for BaselineScenario | ChaosScenario
     "Turn",
     "TurnResult",
     "at",
