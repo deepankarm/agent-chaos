@@ -18,6 +18,17 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 
 
+def _days_ago(days: int) -> str:
+    """Return a date string for N days ago."""
+    return (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def _days_ago_time(days: int, hour: int = 10, minute: int = 0) -> str:
+    """Return a datetime string for N days ago at a specific time."""
+    dt = datetime.now() - timedelta(days=days)
+    return dt.replace(hour=hour, minute=minute).strftime("%Y-%m-%d %H:%M")
+
+
 def get_anthropic_model() -> AnthropicModel:
     return AnthropicModel(model_name="claude-sonnet-4-5-20250929")
 
@@ -26,56 +37,70 @@ def get_anthropic_model() -> AnthropicModel:
 # Initial State Templates (used to create fresh copies per scenario run)
 # =============================================================================
 
-_INITIAL_ORDERS: dict[str, dict[str, Any]] = {
-    "ORD-12345": {
-        "order_id": "ORD-12345",
-        "customer_id": "CUST-001",
-        "status": "delivered",
-        "items": [
-            {
-                "name": "Wireless Headphones",
-                "sku": "WH-100",
-                "quantity": 1,
-                "price": 79.99,
-            },
-            {"name": "USB-C Cable", "sku": "USB-C-2M", "quantity": 2, "price": 12.99},
-        ],
-        "total": 105.97,
-        "shipping_address": "123 Main St, Seattle, WA 98101",
-        "order_date": "2024-12-15",
-        "delivery_date": "2024-12-20",
-    },
-    "ORD-67890": {
-        "order_id": "ORD-67890",
-        "customer_id": "CUST-001",
-        "status": "shipped",
-        "items": [
-            {"name": "Laptop Stand", "sku": "LS-PRO", "quantity": 1, "price": 49.99},
-        ],
-        "total": 54.99,
-        "shipping_address": "123 Main St, Seattle, WA 98101",
-        "order_date": "2024-12-22",
-        "tracking_number": "1Z999AA10123456784",
-        "carrier": "UPS",
-        "estimated_delivery": "2024-12-28",
-    },
-    "ORD-11111": {
-        "order_id": "ORD-11111",
-        "customer_id": "CUST-002",
-        "status": "processing",
-        "items": [
-            {
-                "name": "Mechanical Keyboard",
-                "sku": "KB-MX",
-                "quantity": 1,
-                "price": 129.99,
-            },
-        ],
-        "total": 129.99,
-        "shipping_address": "456 Oak Ave, Portland, OR 97201",
-        "order_date": "2024-12-26",
-    },
-}
+
+def _get_initial_orders() -> dict[str, dict[str, Any]]:
+    """Generate orders with dynamic dates relative to today."""
+    return {
+        "ORD-12345": {
+            "order_id": "ORD-12345",
+            "customer_id": "CUST-001",
+            "status": "delivered",
+            "items": [
+                {
+                    "name": "Wireless Headphones",
+                    "sku": "WH-100",
+                    "quantity": 1,
+                    "price": 79.99,
+                },
+                {
+                    "name": "USB-C Cable",
+                    "sku": "USB-C-2M",
+                    "quantity": 2,
+                    "price": 12.99,
+                },
+            ],
+            "total": 105.97,
+            "shipping_address": "123 Main St, Seattle, WA 98101",
+            "order_date": _days_ago(10),  # 10 days ago
+            "delivery_date": _days_ago(5),  # delivered 5 days ago
+        },
+        "ORD-67890": {
+            "order_id": "ORD-67890",
+            "customer_id": "CUST-001",
+            "status": "shipped",
+            "items": [
+                {
+                    "name": "Laptop Stand",
+                    "sku": "LS-PRO",
+                    "quantity": 1,
+                    "price": 49.99,
+                },
+            ],
+            "total": 54.99,
+            "shipping_address": "123 Main St, Seattle, WA 98101",
+            "order_date": _days_ago(3),  # 3 days ago
+            "tracking_number": "1Z999AA10123456784",
+            "carrier": "UPS",
+            "estimated_delivery": _days_ago(-1),  # tomorrow
+        },
+        "ORD-11111": {
+            "order_id": "ORD-11111",
+            "customer_id": "CUST-002",
+            "status": "processing",
+            "items": [
+                {
+                    "name": "Mechanical Keyboard",
+                    "sku": "KB-MX",
+                    "quantity": 1,
+                    "price": 129.99,
+                },
+            ],
+            "total": 129.99,
+            "shipping_address": "456 Oak Ave, Portland, OR 97201",
+            "order_date": _days_ago(1),  # yesterday
+        },
+    }
+
 
 _INITIAL_REFUNDS: dict[str, dict[str, Any]] = {
     "REF-001": {
@@ -88,30 +113,34 @@ _INITIAL_REFUNDS: dict[str, dict[str, Any]] = {
     },
 }
 
-_INITIAL_SHIPPING: dict[str, list[dict[str, Any]]] = {
-    "1Z999AA10123456784": [
-        {
-            "timestamp": "2024-12-22 10:00",
-            "location": "Seattle, WA",
-            "status": "Package picked up",
-        },
-        {
-            "timestamp": "2024-12-23 06:00",
-            "location": "Portland, OR",
-            "status": "In transit",
-        },
-        {
-            "timestamp": "2024-12-24 08:00",
-            "location": "San Francisco, CA",
-            "status": "At distribution center",
-        },
-        {
-            "timestamp": "2024-12-25 14:00",
-            "location": "Los Angeles, CA",
-            "status": "Out for delivery",
-        },
-    ],
-}
+
+def _get_initial_shipping() -> dict[str, list[dict[str, Any]]]:
+    """Generate shipping events with dynamic timestamps."""
+    return {
+        "1Z999AA10123456784": [
+            {
+                "timestamp": _days_ago_time(3, hour=10),
+                "location": "Los Angeles, CA",
+                "status": "Package picked up from warehouse",
+            },
+            {
+                "timestamp": _days_ago_time(2, hour=6),
+                "location": "San Francisco, CA",
+                "status": "In transit",
+            },
+            {
+                "timestamp": _days_ago_time(1, hour=14),
+                "location": "Portland, OR",
+                "status": "At distribution center",
+            },
+            {
+                "timestamp": _days_ago_time(0, hour=8),
+                "location": "Seattle, WA",
+                "status": "Out for delivery",
+            },
+        ],
+    }
+
 
 _INITIAL_PRODUCTS: dict[str, dict[str, Any]] = {
     "WH-100": {"name": "Wireless Headphones", "in_stock": True, "quantity": 150},
@@ -146,15 +175,13 @@ class SupportDeps:
     escalation_requested: bool = False
     refund_attempts: int = 0
 
-    # Isolated state per run (fresh deep copies)
-    orders_db: dict[str, dict[str, Any]] = field(
-        default_factory=lambda: deepcopy(_INITIAL_ORDERS)
-    )
+    # Isolated state per run (fresh copies with dynamic dates)
+    orders_db: dict[str, dict[str, Any]] = field(default_factory=_get_initial_orders)
     refunds_db: dict[str, dict[str, Any]] = field(
         default_factory=lambda: deepcopy(_INITIAL_REFUNDS)
     )
     shipping_db: dict[str, list[dict[str, Any]]] = field(
-        default_factory=lambda: deepcopy(_INITIAL_SHIPPING)
+        default_factory=_get_initial_shipping
     )
     products_db: dict[str, dict[str, Any]] = field(
         default_factory=lambda: deepcopy(_INITIAL_PRODUCTS)
@@ -413,6 +440,28 @@ You have access to tools for order lookup, shipping tracking, refunds, and escal
 # =============================================================================
 
 
+def build_message_history(ctx: ChaosContext):
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        TextPart,
+        UserPromptPart,
+    )
+
+    message_history = []
+    for msg in ctx.get_message_history():
+        if msg["role"] == "user":
+            message_history.append(
+                ModelRequest(parts=[UserPromptPart(content=msg["content"])])
+            )
+        elif msg["role"] == "assistant":
+            message_history.append(
+                ModelResponse(parts=[TextPart(content=msg["content"])])
+            )
+
+    return message_history
+
+
 async def run_support_agent(ctx: ChaosContext, query: str) -> str:
     """Run the support agent with a customer query.
 
@@ -425,6 +474,7 @@ async def run_support_agent(ctx: ChaosContext, query: str) -> str:
     Returns:
         The agent's response as a string
     """
+
     agent = create_support_agent()
 
     # Get or create deps - reuse across turns within the same scenario run
@@ -433,13 +483,7 @@ async def run_support_agent(ctx: ChaosContext, query: str) -> str:
         deps = SupportDeps()
         ctx.agent_state["deps"] = deps
 
-    # Get message history from previous turns (if any)
-    message_history = ctx.agent_state.get("message_history")
-
     # Run with history for multi-turn conversation continuity
-    result = await agent.run(query, deps=deps, message_history=message_history)
-
-    # Store message history for next turn
-    ctx.agent_state["message_history"] = result.all_messages()
-
+    history = build_message_history(ctx) or None
+    result = await agent.run(query, deps=deps, message_history=history)
     return str(result.output)

@@ -153,6 +153,30 @@ class ChaosContext:
                 return result
         return None
 
+    def get_message_history(self) -> list[dict[str, str]]:
+        """Get conversation history from previous turns.
+
+        Returns a list of messages in a simple format that agents can use
+        to build context for LLM calls. This includes ALL previous turns,
+        even those that failed (so user context is preserved).
+
+        Returns:
+            List of dicts with 'role' ('user' or 'assistant') and 'content'.
+
+        Example:
+            >>> history = ctx.get_message_history()
+            >>> # [{'role': 'user', 'content': '...'}, {'role': 'assistant', 'content': '...'}]
+        """
+        messages = []
+        for turn in self.turn_results:
+            # Always include user message (even for failed turns)
+            if turn.input:
+                messages.append({"role": "user", "content": turn.input})
+            # Only include assistant response if turn succeeded
+            if turn.success and turn.response:
+                messages.append({"role": "assistant", "content": turn.response})
+        return messages
+
 
 @contextmanager
 def chaos_context(
