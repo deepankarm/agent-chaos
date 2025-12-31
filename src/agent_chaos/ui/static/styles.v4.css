@@ -102,7 +102,7 @@ body {
 }
 
 /* ============================================================
-   Header (same as v3)
+   Header - Single row with centered stats
    ============================================================ */
 .header {
     position: sticky;
@@ -111,11 +111,10 @@ body {
     background: var(--bg-glass);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-subtle);
-    padding: 0 var(--space-lg);
-    height: 52px;
+    padding: var(--space-sm) var(--space-lg);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--space-md);
 }
 
 .logo {
@@ -137,10 +136,12 @@ body {
     color: var(--text-primary);
 }
 
-/* Header stats - compact TL;DR */
+/* Header stats - centered, takes remaining space */
 .header-stats {
+    flex: 1;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-lg);
 }
 
@@ -172,10 +173,18 @@ body {
 .header-stat.warn .stat-value { color: var(--warning-amber); }
 .header-stat.bad .stat-value { color: var(--chaos-red); }
 
+/* Header controls - view toggle, filters, theme toggle */
 .header-controls {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: 8px;
+}
+
+.header-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-medium);
+    margin: 0 4px;
 }
 
 .theme-toggle {
@@ -185,7 +194,6 @@ body {
     border: 1px solid var(--border-medium);
     background: var(--bg-secondary);
     color: var(--text-secondary);
-    font-size: 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -199,39 +207,17 @@ body {
     color: var(--accent-primary);
 }
 
-.status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 500;
-    font-family: var(--font-mono);
+.theme-toggle svg {
+    width: 16px;
+    height: 16px;
 }
 
-.status-indicator.connected {
-    background: var(--resilient-glow);
-    color: var(--resilient-green);
-}
+/* Show sun in dark mode (click to go light), moon in light mode (click to go dark) */
+.theme-toggle .icon-sun { display: block; }
+.theme-toggle .icon-moon { display: none; }
 
-.status-indicator.disconnected {
-    background: var(--chaos-red-glow);
-    color: var(--chaos-red);
-}
-
-.status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
+[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
 /* ============================================================
    Main Layout
@@ -270,39 +256,6 @@ body {
    Scenarios Section (same as v3)
    ============================================================ */
 .scenarios-section { margin-bottom: var(--space-lg); }
-
-.section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-md);
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-}
-
-.section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
-.section-count {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: var(--bg-tertiary);
-    padding: 2px 8px;
-    border-radius: 10px;
-}
-
-.filter-groups {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
 
 /* View Toggle (Grid/List) */
 .view-toggle {
@@ -928,6 +881,22 @@ body {
     transition: transform var(--transition-fast);
 }
 
+/* Icon-only filter triggers (compact mode) */
+.filter-dropdown-wrapper.icon-only .filter-dropdown-trigger {
+    padding: 6px 8px;
+    gap: 4px;
+}
+
+.filter-dropdown-wrapper.icon-only .filter-arrow {
+    font-size: 8px;
+    margin-left: 0;
+}
+
+.filter-dropdown-wrapper.icon-only .filter-dropdown {
+    left: auto;
+    right: 0;
+}
+
 .filter-dropdown-trigger.dropdown-open .filter-arrow {
     transform: rotate(180deg);
 }
@@ -936,7 +905,7 @@ body {
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    min-width: 130px;
+    width: max-content;
     background: var(--bg-secondary);
     border: 1px solid var(--border-medium);
     border-radius: 6px;
@@ -969,7 +938,7 @@ body {
     color: var(--text-secondary);
     font-size: 12px;
     font-family: var(--font-display);
-    text-align: left;
+    text-align: right;
     cursor: pointer;
     transition: var(--transition-fast);
 }
@@ -992,8 +961,8 @@ body {
     color: var(--accent-secondary);
 }
 
-.filter-option.active::before {
-    content: '✓ ';
+.filter-option.active::after {
+    content: ' ✓';
     opacity: 0.7;
 }
 

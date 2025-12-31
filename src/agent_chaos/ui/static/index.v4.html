@@ -19,11 +19,78 @@
             <!-- Dynamic stats populated by JS -->
         </div>
         <div class="header-controls">
-            <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
-            <div class="status-indicator disconnected" id="statusBadge">
-                <div class="status-dot"></div>
-                <span id="statusText">Connecting...</span>
+            <div class="view-toggle" id="viewToggle">
+                <button class="view-btn active" data-view="grid" title="Grid view">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <rect x="1" y="1" width="6" height="6" rx="1"/>
+                        <rect x="9" y="1" width="6" height="6" rx="1"/>
+                        <rect x="1" y="9" width="6" height="6" rx="1"/>
+                        <rect x="9" y="9" width="6" height="6" rx="1"/>
+                    </svg>
+                </button>
+                <button class="view-btn" data-view="list" title="List view">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <rect x="1" y="2" width="14" height="2" rx="0.5"/>
+                        <rect x="1" y="7" width="14" height="2" rx="0.5"/>
+                        <rect x="1" y="12" width="14" height="2" rx="0.5"/>
+                    </svg>
+                </button>
             </div>
+            <div class="filter-dropdown-wrapper icon-only" id="groupDropdownWrapper">
+                <button class="filter-dropdown-trigger" id="groupDropdownTrigger" title="Group by">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M1 3h14v2H1zM3 7h12v2H3zM3 11h12v2H3z"/>
+                    </svg>
+                    <span class="filter-arrow">▾</span>
+                </button>
+                <div class="filter-dropdown" id="groupDropdown">
+                    <button class="filter-option" data-mode="none">None</button>
+                    <button class="filter-option" data-mode="tags">By Tag</button>
+                    <button class="filter-option active" data-mode="parent">By Parent</button>
+                </div>
+            </div>
+            <div class="filter-dropdown-wrapper icon-only" id="statusDropdownWrapper">
+                <button class="filter-dropdown-trigger" id="statusDropdownTrigger" title="Filter by status">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <path d="M5 8l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="filter-arrow">▾</span>
+                </button>
+                <div class="filter-dropdown" id="statusDropdown">
+                    <button class="filter-option active" data-filter="all">All</button>
+                    <button class="filter-option" data-filter="passed">Passed</button>
+                    <button class="filter-option" data-filter="failed">Failed</button>
+                </div>
+            </div>
+            <div class="filter-dropdown-wrapper icon-only" id="chaosTypeDropdownWrapper">
+                <button class="filter-dropdown-trigger" id="chaosTypeDropdownTrigger" title="Filter by chaos type">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M9 1L4 9h4l-1 6 5-8H8l1-6z"/>
+                    </svg>
+                    <span class="filter-arrow">▾</span>
+                </button>
+                <div class="filter-dropdown" id="chaosTypeDropdown">
+                    <button class="filter-option active" data-type="all">All Types</button>
+                    <button class="filter-option" data-type="none">None (Baseline)</button>
+                    <button class="filter-option" data-type="user_input">User Input</button>
+                    <button class="filter-option" data-type="llm">LLM Call</button>
+                    <button class="filter-option" data-type="stream">LLM Streaming</button>
+                    <button class="filter-option" data-type="tool">Tools</button>
+                    <button class="filter-option" data-type="context">Context</button>
+                </div>
+            </div>
+            <div class="header-divider"></div>
+            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M6 1a7 7 0 1 0 7.368 10.524 5.5 5.5 0 0 1-7.892-7.892A7.06 7.06 0 0 0 6 1z"/>
+                </svg>
+                <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="3"/>
+                    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.414 1.414M11.536 11.536l1.414 1.414M3.05 12.95l1.414-1.414M11.536 4.464l1.414-1.414"/>
+                    <path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.414 1.414M11.536 11.536l1.414 1.414M3.05 12.95l1.414-1.414M11.536 4.464l1.414-1.414"/>
+                </svg>
+            </button>
         </div>
     </header>
     
@@ -35,76 +102,6 @@
 
         <!-- Scenarios Section -->
         <section class="scenarios-section">
-            <div class="section-header">
-                <h2 class="section-title">Scenarios <span class="section-count" id="scenarioCount">0</span></h2>
-                <div class="filter-groups">
-                    <div class="view-toggle" id="viewToggle">
-                        <button class="view-btn active" data-view="grid" title="Grid view">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                                <rect x="1" y="1" width="6" height="6" rx="1"/>
-                                <rect x="9" y="1" width="6" height="6" rx="1"/>
-                                <rect x="1" y="9" width="6" height="6" rx="1"/>
-                                <rect x="9" y="9" width="6" height="6" rx="1"/>
-                            </svg>
-                        </button>
-                        <button class="view-btn" data-view="list" title="List view">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                                <rect x="1" y="2" width="14" height="2" rx="0.5"/>
-                                <rect x="1" y="7" width="14" height="2" rx="0.5"/>
-                                <rect x="1" y="12" width="14" height="2" rx="0.5"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="filter-dropdown-wrapper" id="groupDropdownWrapper">
-                        <button class="filter-dropdown-trigger" id="groupDropdownTrigger" title="Group scenarios">
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M1 3h14v2H1zM3 7h12v2H3zM3 11h12v2H3z"/>
-                            </svg>
-                            <span class="filter-label" id="groupLabel">Group</span>
-                            <span class="filter-arrow">▾</span>
-                        </button>
-                        <div class="filter-dropdown" id="groupDropdown">
-                            <button class="filter-option" data-mode="none">None</button>
-                            <button class="filter-option" data-mode="tags">By Tag</button>
-                            <button class="filter-option active" data-mode="parent">By Parent</button>
-                        </div>
-                    </div>
-                    <div class="filter-dropdown-wrapper" id="statusDropdownWrapper">
-                        <button class="filter-dropdown-trigger" id="statusDropdownTrigger" title="Filter by status">
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2"/>
-                                <path d="M5 8l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span class="filter-label" id="statusLabel">Status</span>
-                            <span class="filter-arrow">▾</span>
-                        </button>
-                        <div class="filter-dropdown" id="statusDropdown">
-                            <button class="filter-option active" data-filter="all">All</button>
-                            <button class="filter-option" data-filter="passed">Passed</button>
-                            <button class="filter-option" data-filter="failed">Failed</button>
-                        </div>
-                    </div>
-                    <div class="filter-dropdown-wrapper align-right" id="chaosTypeDropdownWrapper">
-                        <button class="filter-dropdown-trigger" id="chaosTypeDropdownTrigger" title="Filter by chaos type">
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M8 1l1.5 3.5L13 5l-2.5 2.5L11 12l-3-2-3 2 .5-4.5L3 5l3.5-.5z"/>
-                            </svg>
-                            <span class="filter-label" id="chaosTypeLabel">Chaos Type</span>
-                            <span class="filter-arrow">▾</span>
-                        </button>
-                        <div class="filter-dropdown" id="chaosTypeDropdown">
-                            <button class="filter-option active" data-type="all">All Types</button>
-                            <button class="filter-option" data-type="none">None (Baseline)</button>
-                            <button class="filter-option" data-type="user_input">User Input</button>
-                            <button class="filter-option" data-type="llm">LLM Call</button>
-                            <button class="filter-option" data-type="stream">LLM Streaming</button>
-                            <button class="filter-option" data-type="tool">Tools</button>
-                            <button class="filter-option" data-type="context">Context</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
             <div class="scenarios-grid" id="scenariosGrid">
                 <div class="empty-state" id="emptyState">
                     <div class="empty-icon">🎲</div>

@@ -128,7 +128,6 @@ function toggleTheme() {
 
 function updateThemeButton() {
     const btn = document.getElementById('themeToggle');
-    btn.textContent = state.theme === 'dark' ? '☀️' : '🌙';
     btn.title = state.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
 }
 
@@ -310,7 +309,6 @@ function renderNarrativeSummary() {
     if (s.total === 0) {
         summaryBar.classList.add('hidden');
         headerStats.innerHTML = '';
-        document.getElementById('scenarioCount').textContent = '0';
         return;
     }
 
@@ -360,7 +358,6 @@ function renderNarrativeSummary() {
     }
 
     headerStats.innerHTML = statsHtml;
-    document.getElementById('scenarioCount').textContent = s.total;
 }
 
 // ============================================================
@@ -601,11 +598,6 @@ function setStatusFilter(filter) {
 
 function updateStatusUI() {
     const trigger = document.getElementById('statusDropdownTrigger');
-    const label = document.getElementById('statusLabel');
-
-    // Update label - always show current selection
-    const labels = { all: 'All', passed: 'Passed', failed: 'Failed' };
-    label.textContent = labels[state.filter] || 'All';
 
     // Button always looks active (blue) since there's always a selection
     trigger.classList.add('active');
@@ -636,14 +628,6 @@ function setChaosTypeFilter(type) {
 
 function updateChaosTypeUI() {
     const trigger = document.getElementById('chaosTypeDropdownTrigger');
-    const label = document.getElementById('chaosTypeLabel');
-
-    // Update label - always show current selection
-    if (state.typeFilter.length === 0) {
-        label.textContent = 'All Chaos Types';
-    } else {
-        label.textContent = getChaosTypeLabel(state.typeFilter[0]);
-    }
 
     // Button always looks active (blue) since there's always a selection
     trigger.classList.add('active');
@@ -762,15 +746,6 @@ function setGroupMode(mode) {
 
 function updateGroupUI() {
     const trigger = document.getElementById('groupDropdownTrigger');
-    const label = document.getElementById('groupLabel');
-
-    // Update button label - always show current selection
-    if (state.groupByTags) {
-        const modeLabel = state.groupMode === 'parent' ? 'Parent' : 'Tags';
-        label.textContent = modeLabel;
-    } else {
-        label.textContent = 'None';
-    }
 
     // Button always looks active (blue) since there's always a selection
     trigger.classList.add('active');
@@ -1808,19 +1783,16 @@ function connect() {
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     
     ws.onopen = () => {
-        document.getElementById('statusBadge').className = 'status-indicator connected';
-        document.getElementById('statusText').textContent = 'Live';
+        console.log('WebSocket connected');
     };
-    
+
     ws.onclose = () => {
-        document.getElementById('statusBadge').className = 'status-indicator disconnected';
-        document.getElementById('statusText').textContent = 'Offline';
+        console.log('WebSocket disconnected, reconnecting...');
         setTimeout(connect, 2000);
     };
-    
+
     ws.onerror = () => {
-        document.getElementById('statusBadge').className = 'status-indicator disconnected';
-        document.getElementById('statusText').textContent = 'Error';
+        console.error('WebSocket error');
     };
     
     ws.onmessage = (msg) => {
