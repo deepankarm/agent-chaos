@@ -1,21 +1,25 @@
+"""User input chaos types — mutate user queries."""
+
+from __future__ import annotations
+
 import inspect
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
 
-if TYPE_CHECKING:
-    from agent_chaos.core.context import ChaosContext
+
+# Type alias for user input mutators
+# The actual signature is detected at runtime in _build_trigger_and_detect_mutator
+UserMutator = Callable[..., str]
 
 
-UserMutator = Callable[[str], str]  # (query) -> query
-UserMutatorWithCtx = Callable[["ChaosContext", str], str]  # (ctx, query) -> query
-
-
-@dataclass
-class UserInputChaos:
+class UserInputChaos(BaseModel):
     """Base class for user input chaos."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     probability: float = 1.0
     always: bool = True  # User input mutations typically always apply
@@ -23,9 +27,11 @@ class UserInputChaos:
     on_turn: int | None = None
     after_turns: int | None = None
     between_turns: tuple[int, int] | None = None
-    _trigger: TriggerConfig = field(init=False)
 
-    def __post_init__(self):
+    _trigger: TriggerConfig = PrivateAttr()
+
+    @model_validator(mode="after")
+    def _build_trigger(self) -> UserInputChaos:
         self._trigger = TriggerConfig(
             probability=self.probability,
             always=self.always,
@@ -33,6 +39,7 @@ class UserInputChaos:
             after_turns=self.after_turns,
             between_turns=self.between_turns,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -53,21 +60,23 @@ class UserInputChaos:
         return ChaosResult.proceed()
 
 
-@dataclass
 class UserInputMutateChaos(UserInputChaos):
     """Custom user input mutation using user-provided function."""
 
-    mutator: UserMutator | UserMutatorWithCtx | None = None
-    _accepts_ctx: bool = field(init=False, default=False)
+    mutator: UserMutator | None = None
 
-    def __str__(self) -> str:
-        fn_name = (
-            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+    _accepts_ctx: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="after")
+    def _build_trigger_and_detect_mutator(self) -> UserInputMutateChaos:
+        # Build trigger
+        self._trigger = TriggerConfig(
+            probability=self.probability,
+            always=self.always,
+            on_turn=self.on_turn,
+            after_turns=self.after_turns,
+            between_turns=self.between_turns,
         )
-        return f"user_input_mutate[{fn_name}]"
-
-    def __post_init__(self):
-        super().__post_init__()
         # Detect if mutator accepts ChaosContext
         if self.mutator is not None:
             sig = inspect.signature(self.mutator)
@@ -76,6 +85,13 @@ class UserInputMutateChaos(UserInputChaos):
             self._accepts_ctx = len(params) >= 2 or (
                 len(params) > 0 and params[0] == "ctx"
             )
+        return self
+
+    def __str__(self) -> str:
+        fn_name = (
+            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+        )
+        return f"user_input_mutate[{fn_name}]"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         if self.mutator is None:
@@ -92,7 +108,7 @@ class UserInputMutateChaos(UserInputChaos):
         return ChaosResult.mutate(mutated)
 
 
-def user_input_mutate(fn: UserMutator | UserMutatorWithCtx) -> ChaosBuilder:
+def user_input_mutate(fn: UserMutator) -> ChaosBuilder:
     """Create a custom user input mutation chaos.
 
     This is the first boundary — mutate the user query before the agent processes it.

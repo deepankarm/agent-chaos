@@ -1,42 +1,40 @@
 """Base chaos types and protocols."""
 
-from dataclasses import dataclass
-from enum import Enum
+from __future__ import annotations
+
 from typing import Any, Protocol, runtime_checkable
 
+from pydantic import BaseModel, ConfigDict, field_validator
 
-class ChaosPoint(str, Enum):
-    """Injection points for chaos."""
+from agent_chaos.types import ChaosAction, ChaosPoint
 
-    USER_INPUT = "user_input"  # Before agent processes → mutate user query
-    LLM_CALL = "llm_call"  # Before LLM call → raise exception
-    STREAM = "stream"  # During streaming → hang/cut/slow
-    TOOL_RESULT = "tool_result"  # After tool returns → mutate result
-    MESSAGES = "messages"  # Before LLM call → mutate messages array (RAG/memory)
+# Re-export for backwards compatibility
+__all__ = ["ChaosPoint", "ChaosAction", "ChaosResult", "Chaos", "TriggerConfig"]
 
 
-@dataclass
-class ChaosResult:
+class ChaosResult(BaseModel):
     """Result of applying chaos."""
 
-    action: str  # "proceed", "raise", "mutate"
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    action: ChaosAction
     exception: Exception | None = None
     mutated: Any | None = None
 
     @classmethod
-    def proceed(cls) -> "ChaosResult":
+    def proceed(cls) -> ChaosResult:
         """Continue without chaos."""
-        return cls(action="proceed")
+        return cls(action=ChaosAction.PROCEED)
 
     @classmethod
-    def raise_exception(cls, exc: Exception) -> "ChaosResult":
+    def raise_exception(cls, exc: Exception) -> ChaosResult:
         """Raise an exception."""
-        return cls(action="raise", exception=exc)
+        return cls(action=ChaosAction.RAISE, exception=exc)
 
     @classmethod
-    def mutate(cls, value: Any) -> "ChaosResult":
+    def mutate(cls, value: Any) -> ChaosResult:
         """Return mutated value."""
-        return cls(action="mutate", mutated=value)
+        return cls(action=ChaosAction.MUTATE, mutated=value)
 
 
 @runtime_checkable
@@ -63,8 +61,7 @@ class Chaos(Protocol):
         ...
 
 
-@dataclass
-class TriggerConfig:
+class TriggerConfig(BaseModel):
     """Common triggering configuration.
 
     Supports both call-based and turn-based triggers:
@@ -89,6 +86,22 @@ class TriggerConfig:
     probability: float | None = None
     provider: str | None = None
     always: bool = False
+
+    @field_validator("probability")
+    @classmethod
+    def validate_probability(cls, v: float | None) -> float | None:
+        """Validate probability is between 0 and 1."""
+        if v is not None and not (0.0 <= v <= 1.0):
+            raise ValueError("probability must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("on_call", "after_calls", "on_turn", "after_turns")
+    @classmethod
+    def validate_positive(cls, v: int | None) -> int | None:
+        """Validate that call/turn numbers are positive."""
+        if v is not None and v < 1:
+            raise ValueError("call and turn numbers must be >= 1")
+        return v
 
     def should_trigger(
         self,

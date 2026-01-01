@@ -1,26 +1,25 @@
 """Tool chaos types — mutate tool results."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import inspect
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
 
-if TYPE_CHECKING:
-    from agent_chaos.core.context import ChaosContext
+
+# Type alias for tool mutators
+# The actual signature is detected at runtime in _build_trigger_and_detect_mutator
+ToolMutator = Callable[..., str]
 
 
-# Type aliases for tool mutators
-ToolMutator = Callable[[str, str], str]  # (tool_name, result) -> result
-ToolMutatorWithCtx = Callable[
-    ["ChaosContext", str, str], str
-]  # (ctx, tool_name, result) -> result
-
-
-@dataclass
-class ToolChaos:
+class ToolChaos(BaseModel):
     """Base class for tool result chaos."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     tool_name: str | None = None  # None = all tools
     on_call: int | None = None
@@ -32,9 +31,11 @@ class ToolChaos:
     on_turn: int | None = None
     after_turns: int | None = None
     between_turns: tuple[int, int] | None = None
-    _trigger: TriggerConfig = field(init=False)
 
-    def __post_init__(self):
+    _trigger: TriggerConfig = PrivateAttr()
+
+    @model_validator(mode="after")
+    def _build_trigger(self) -> ToolChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -45,6 +46,7 @@ class ToolChaos:
             after_turns=self.after_turns,
             between_turns=self.between_turns,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -71,22 +73,20 @@ class ToolChaos:
         return ChaosResult.proceed()
 
 
-@dataclass
 class ToolErrorChaos(ToolChaos):
     """Replace tool result with error message."""
 
-    message: str = "Tool error"
+    error_message: str = "Tool error"
 
     def __str__(self) -> str:
         target = f"({self.tool_name})" if self.tool_name else "(all)"
         return f"tool_error{target}"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
-        result = f'{{"error": "{self.message}"}}'
+        result = f'{{"error": "{self.error_message}"}}'
         return ChaosResult.mutate(result)
 
 
-@dataclass
 class ToolEmptyChaos(ToolChaos):
     """Replace tool result with empty result."""
 
@@ -98,7 +98,6 @@ class ToolEmptyChaos(ToolChaos):
         return ChaosResult.mutate("")
 
 
-@dataclass
 class ToolTimeoutChaos(ToolChaos):
     """Replace tool result with timeout message."""
 
@@ -113,22 +112,26 @@ class ToolTimeoutChaos(ToolChaos):
         return ChaosResult.mutate(result)
 
 
-@dataclass
 class ToolMutateChaos(ToolChaos):
     """Custom tool mutation using user-provided function."""
 
-    mutator: ToolMutator | ToolMutatorWithCtx | None = None
-    _accepts_ctx: bool = field(init=False, default=False)
+    mutator: ToolMutator | None = None
 
-    def __str__(self) -> str:
-        target = f"({self.tool_name})" if self.tool_name else "(all)"
-        fn_name = (
-            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+    _accepts_ctx: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="after")
+    def _build_trigger_and_detect_mutator(self) -> ToolMutateChaos:
+        # Build trigger (parent behavior)
+        self._trigger = TriggerConfig(
+            on_call=self.on_call,
+            after_calls=self.after_calls,
+            probability=self.probability,
+            provider=self.provider,
+            always=self.always,
+            on_turn=self.on_turn,
+            after_turns=self.after_turns,
+            between_turns=self.between_turns,
         )
-        return f"tool_mutate[{fn_name}]{target}"
-
-    def __post_init__(self):
-        super().__post_init__()
         # Detect if mutator accepts ChaosContext
         if self.mutator is not None:
             sig = inspect.signature(self.mutator)
@@ -137,6 +140,14 @@ class ToolMutateChaos(ToolChaos):
             self._accepts_ctx = len(params) >= 3 or (
                 len(params) > 0 and params[0] == "ctx"
             )
+        return self
+
+    def __str__(self) -> str:
+        target = f"({self.tool_name})" if self.tool_name else "(all)"
+        fn_name = (
+            getattr(self.mutator, "__name__", "custom") if self.mutator else "none"
+        )
+        return f"tool_mutate[{fn_name}]{target}"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         if self.mutator is None:
@@ -159,7 +170,7 @@ class ToolMutateChaos(ToolChaos):
 
 def tool_error(message: str = "Tool error") -> ChaosBuilder:
     """Create a tool error chaos."""
-    return ChaosBuilder(ToolErrorChaos, message=message)
+    return ChaosBuilder(ToolErrorChaos, error_message=message)
 
 
 def tool_empty() -> ChaosBuilder:
@@ -172,7 +183,7 @@ def tool_timeout(timeout_seconds: float = 30.0) -> ChaosBuilder:
     return ChaosBuilder(ToolTimeoutChaos, timeout_seconds=timeout_seconds)
 
 
-def tool_mutate(fn: ToolMutator | ToolMutatorWithCtx) -> ChaosBuilder:
+def tool_mutate(fn: ToolMutator) -> ChaosBuilder:
     """Create a custom tool mutation chaos.
 
     Args:
