@@ -370,12 +370,13 @@ class TestChaosInjectorContext:
     def test_set_context(self) -> None:
         from agent_chaos.core.context import ChaosContext
         from agent_chaos.core.metrics import MetricsStore
+        from agent_chaos.core.recorder import Recorder
 
         injector = ChaosInjector()
         ctx = ChaosContext(
             name="test",
             injector=injector,
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="test-123",
         )
 

@@ -8,6 +8,7 @@ import pytest
 from agent_chaos.core.context import ChaosContext
 from agent_chaos.core.injector import ChaosInjector
 from agent_chaos.core.metrics import MetricsStore
+from agent_chaos.core.recorder import Recorder
 from agent_chaos.scenario.model import TurnResult
 
 
@@ -17,7 +18,7 @@ def ctx() -> ChaosContext:
     return ChaosContext(
         name="test-ctx",
         injector=ChaosInjector(chaos=[]),
-        metrics=MetricsStore(),
+        recorder=Recorder(metrics=MetricsStore()),
         session_id="test-123",
     )
 
@@ -42,17 +43,18 @@ class TestChaosContextInit:
         ctx = ChaosContext(
             name="test",
             injector=injector,
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="session-1",
         )
         assert ctx.injector is injector
 
     def test_with_metrics(self) -> None:
         metrics = MetricsStore()
+        recorder = Recorder(metrics=metrics)
         ctx = ChaosContext(
             name="test",
             injector=ChaosInjector(chaos=[]),
-            metrics=metrics,
+            recorder=recorder,
             session_id="session-1",
         )
         assert ctx.metrics is metrics
@@ -238,12 +240,12 @@ class TestChaosContextAgentState:
 class TestChaosContextWithFixtures:
     """Tests using conftest fixtures."""
 
-    def test_basic_init(self, chaos_injector: ChaosInjector, metrics_store: MetricsStore):
+    def test_basic_init(self, chaos_injector: ChaosInjector, recorder: Recorder, metrics_store: MetricsStore):
         """Test basic context creation."""
         ctx = ChaosContext(
             name="test",
             injector=chaos_injector,
-            metrics=metrics_store,
+            recorder=recorder,
             session_id="session-123",
         )
         assert ctx.name == "test"

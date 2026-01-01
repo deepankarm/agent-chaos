@@ -36,10 +36,11 @@ from agent_chaos.scenario.assertions import (
 @pytest.fixture
 def ctx() -> ChaosContext:
     """Fresh ChaosContext for testing."""
+    from agent_chaos.core.recorder import Recorder
     return ChaosContext(
         name="test-ctx",
         injector=ChaosInjector(chaos=[]),
-        metrics=MetricsStore(),
+        recorder=Recorder(metrics=MetricsStore()),
         session_id="test-123",
     )
 
@@ -47,10 +48,11 @@ def ctx() -> ChaosContext:
 @pytest.fixture
 def ctx_with_turns() -> ChaosContext:
     """ChaosContext with turn results."""
+    from agent_chaos.core.recorder import Recorder
     ctx = ChaosContext(
         name="test-ctx",
         injector=ChaosInjector(chaos=[]),
-        metrics=MetricsStore(),
+        recorder=Recorder(metrics=MetricsStore()),
         session_id="test-123",
     )
     ctx.turn_results = [

@@ -1,15 +1,19 @@
 """Anthropic stream wrapper for fault injection."""
 
+from __future__ import annotations
+
 import asyncio
 import time
-from abc import ABC, abstractmethod
-from typing import Any
+from abc import ABC
+from typing import TYPE_CHECKING, Any
 
 import anthropic
 import httpx
 
 from agent_chaos.core.injector import ChaosInjector
-from agent_chaos.core.metrics import MetricsStore
+
+if TYPE_CHECKING:
+    from agent_chaos.core.recorder import Recorder
 
 
 def _stream_connection_error() -> anthropic.APIConnectionError:
@@ -24,7 +28,7 @@ class BaseStreamFaultMixin(ABC):
     """Mixin providing common stream chaos injection logic."""
 
     _injector: ChaosInjector
-    _metrics: MetricsStore
+    _recorder: "Recorder"
     _call_id: str
     _chunk_count: int
 
@@ -40,11 +44,13 @@ class BaseStreamFaultMixin(ABC):
             delay = self._injector.ttft_delay()
 
             # Get call start time from metrics
-            call_info = self._metrics._active_calls.get(self._call_id)
-            if call_info:
-                call_start_time = call_info["start_time"]
-                ttft = time.monotonic() - call_start_time
-                self._metrics.record_ttft(ttft, self._call_id, is_delayed=bool(delay))
+            metrics = self._recorder.metrics
+            if metrics:
+                call_info = metrics._active_calls.get(self._call_id)
+                if call_info:
+                    call_start_time = call_info["start_time"]
+                    ttft_ms = (time.monotonic() - call_start_time) * 1000
+                    self._recorder.record_ttft(self._call_id, ttft_ms, is_delayed=bool(delay))
 
             # Apply delay fault if configured
             if delay:
@@ -57,11 +63,13 @@ class BaseStreamFaultMixin(ABC):
             delay = self._injector.ttft_delay()
 
             # Get call start time from metrics
-            call_info = self._metrics._active_calls.get(self._call_id)
-            if call_info:
-                call_start_time = call_info["start_time"]
-                ttft = time.monotonic() - call_start_time
-                self._metrics.record_ttft(ttft, self._call_id, is_delayed=bool(delay))
+            metrics = self._recorder.metrics
+            if metrics:
+                call_info = metrics._active_calls.get(self._call_id)
+                if call_info:
+                    call_start_time = call_info["start_time"]
+                    ttft_ms = (time.monotonic() - call_start_time) * 1000
+                    self._recorder.record_ttft(self._call_id, ttft_ms, is_delayed=bool(delay))
 
             # Apply delay fault if configured
             if delay:
@@ -70,21 +78,25 @@ class BaseStreamFaultMixin(ABC):
     def _check_stream_hang_sync(self):
         """Check and apply stream hang (sync)."""
         if self._injector.should_hang(self._chunk_count):
-            self._metrics.record_hang(self._chunk_count, self._call_id)
+            metrics = self._recorder.metrics
+            if metrics:
+                metrics.record_hang(self._chunk_count, self._call_id)
             while True:
                 time.sleep(1)
 
     async def _check_stream_hang_async(self):
         """Check and apply stream hang (async)."""
         if self._injector.should_hang(self._chunk_count):
-            self._metrics.record_hang(self._chunk_count, self._call_id)
+            metrics = self._recorder.metrics
+            if metrics:
+                metrics.record_hang(self._chunk_count, self._call_id)
             while True:
                 await asyncio.sleep(1)
 
     def _check_stream_cut(self):
         """Check and raise stream cut error."""
         if self._injector.should_cut(self._chunk_count):
-            self._metrics.record_stream_cut(self._chunk_count, self._call_id)
+            self._recorder.record_stream_cut(self._call_id, self._chunk_count)
             raise _stream_connection_error()
 
     def _check_slow_chunks_sync(self):
@@ -93,7 +105,9 @@ class BaseStreamFaultMixin(ABC):
             # Record chaos event once
             if not self._slow_chunks_recorded:
                 self._slow_chunks_recorded = True
-                self._metrics.record_slow_chunks(delay * 1000, self._call_id)
+                metrics = self._recorder.metrics
+                if metrics:
+                    metrics.record_slow_chunks(delay * 1000, self._call_id)
             time.sleep(delay)
 
     async def _check_slow_chunks_async(self):
@@ -102,14 +116,18 @@ class BaseStreamFaultMixin(ABC):
             # Record chaos event once
             if not self._slow_chunks_recorded:
                 self._slow_chunks_recorded = True
-                self._metrics.record_slow_chunks(delay * 1000, self._call_id)
+                metrics = self._recorder.metrics
+                if metrics:
+                    metrics.record_slow_chunks(delay * 1000, self._call_id)
             await asyncio.sleep(delay)
 
     def _check_corruption(self, event):
         """Check and apply event corruption."""
         if self._injector.should_corrupt(self._chunk_count):
             event = self._corrupt_event(event)
-            self._metrics.record_corruption(self._chunk_count)
+            metrics = self._recorder.metrics
+            if metrics:
+                metrics.record_corruption(self._chunk_count)
         return event
 
     def _corrupt_event(self, event):
@@ -128,18 +146,20 @@ class BaseStreamFaultMixin(ABC):
 
     def _record_chunk(self):
         """Record chunk in metrics."""
-        self._metrics.record_chunk(self._chunk_count)
+        metrics = self._recorder.metrics
+        if metrics:
+            metrics.record_chunk(self._chunk_count)
 
     def _end_call_success(self):
         """Mark call as successful."""
         # Record final stream stats before ending the call.
         try:
-            self._metrics.record_stream_stats(
+            self._recorder.record_stream_stats(
                 self._call_id, chunk_count=self._chunk_count, provider="anthropic"
             )
         except Exception:
             pass
-        self._metrics.end_call(self._call_id, success=True)
+        self._recorder.end_call(self._call_id, success=True)
 
 
 class ChaosAnthropicStream:
@@ -149,17 +169,17 @@ class ChaosAnthropicStream:
         self,
         inner: Any,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
 
     def __enter__(self) -> "ChaosMessageStream":
         stream = self._inner.__enter__()
-        return ChaosMessageStream(stream, self._injector, self._metrics, self._call_id)
+        return ChaosMessageStream(stream, self._injector, self._recorder, self._call_id)
 
     def __exit__(self, *args):
         return self._inner.__exit__(*args)
@@ -172,12 +192,12 @@ class ChaosMessageStream(BaseStreamFaultMixin):
         self,
         inner: Any,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
         self._init_fault_state()
 
@@ -205,7 +225,7 @@ class ChaosMessageStream(BaseStreamFaultMixin):
     def text_stream(self):
         """Wrap text_stream with fault injection."""
         return ChaosTextStream(
-            self._inner.text_stream, self._injector, self._metrics, self._call_id
+            self._inner.text_stream, self._injector, self._recorder, self._call_id
         )
 
     def get_final_message(self):
@@ -222,12 +242,12 @@ class ChaosTextStream(BaseStreamFaultMixin):
         self,
         inner,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = iter(inner)
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
         self._init_fault_state()
 
@@ -258,18 +278,18 @@ class ChaosAsyncAnthropicStream:
         self,
         inner: Any,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
 
     async def __aenter__(self) -> "ChaosAsyncMessageStream":
         stream = await self._inner.__aenter__()
         return ChaosAsyncMessageStream(
-            stream, self._injector, self._metrics, self._call_id
+            stream, self._injector, self._recorder, self._call_id
         )
 
     async def __aexit__(self, *args):
@@ -283,12 +303,12 @@ class ChaosAsyncMessageStream(BaseStreamFaultMixin):
         self,
         inner: Any,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
         self._init_fault_state()
 
@@ -315,7 +335,7 @@ class ChaosAsyncMessageStream(BaseStreamFaultMixin):
     @property
     def text_stream(self):
         return ChaosAsyncTextStream(
-            self._inner.text_stream, self._injector, self._metrics, self._call_id
+            self._inner.text_stream, self._injector, self._recorder, self._call_id
         )
 
     async def get_final_message(self):
@@ -335,12 +355,12 @@ class ChaosAsyncStreamResponse(BaseStreamFaultMixin):
         self,
         inner: Any,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
         self._init_fault_state()
 
@@ -387,12 +407,12 @@ class ChaosAsyncTextStream(BaseStreamFaultMixin):
         self,
         inner,
         injector: ChaosInjector,
-        metrics: MetricsStore,
+        recorder: "Recorder",
         call_id: str,
     ):
         self._inner = inner
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
         self._call_id = call_id
         self._init_fault_state()
 

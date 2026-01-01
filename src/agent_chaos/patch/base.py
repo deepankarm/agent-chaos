@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from agent_chaos.core.injector import ChaosInjector
-    from agent_chaos.core.metrics import MetricsStore
+    from agent_chaos.core.recorder import Recorder
 
 
 class BaseProviderPatcher(ABC):
@@ -25,12 +25,12 @@ class BaseProviderPatcher(ABC):
         self._patched = False
 
     @abstractmethod
-    def patch(self, injector: "ChaosInjector", metrics: "MetricsStore") -> None:
+    def patch(self, injector: "ChaosInjector", recorder: "Recorder") -> None:
         """Apply patches to the provider's SDK.
 
         Args:
             injector: The chaos injector instance.
-            metrics: The metrics store instance.
+            recorder: The recorder instance for metrics and event emission.
         """
         ...
 

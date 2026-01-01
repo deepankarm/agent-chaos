@@ -50,10 +50,11 @@ class TestUserInputMutateChaos:
             return f"[{ctx.name}] {query}"
 
         chaos = UserInputMutateChaos(mutator=ctx_aware_mutate)
+        from agent_chaos.core.recorder import Recorder
         ctx = ChaosContext(
             name="test-ctx",
             injector=ChaosInjector(chaos=[]),
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="test-123",
         )
         result = chaos.apply(ctx=ctx, query="hello world")

@@ -164,10 +164,11 @@ class TestToolMutateChaos:
             return f"[{ctx.name}] {tool_name}: {result}"
 
         chaos = ToolMutateChaos(mutator=ctx_mutator)
+        from agent_chaos.core.recorder import Recorder
         ctx = ChaosContext(
             name="test-ctx",
             injector=ChaosInjector(chaos=[]),
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="test-123",
         )
         result = chaos.apply(ctx=ctx, tool_name="calc", result="42")

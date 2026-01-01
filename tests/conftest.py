@@ -13,6 +13,7 @@ from agent_chaos.chaos.stream import SlowTTFTChaos, StreamCutChaos, StreamHangCh
 from agent_chaos.chaos.tool import ToolErrorChaos, ToolMutateChaos
 from agent_chaos.core.injector import ChaosInjector
 from agent_chaos.core.metrics import MetricsStore
+from agent_chaos.core.recorder import Recorder
 
 if TYPE_CHECKING:
     from agent_chaos.core.context import ChaosContext
@@ -30,20 +31,26 @@ def metrics_store() -> MetricsStore:
 
 
 @pytest.fixture
+def recorder(metrics_store: MetricsStore) -> Recorder:
+    """Fresh Recorder instance with metrics store."""
+    return Recorder(metrics=metrics_store)
+
+
+@pytest.fixture
 def chaos_injector() -> ChaosInjector:
     """Fresh ChaosInjector with no chaos configured."""
     return ChaosInjector(chaos=[])
 
 
 @pytest.fixture
-def chaos_context(chaos_injector: ChaosInjector, metrics_store: MetricsStore) -> ChaosContext:
-    """Fresh ChaosContext with injector and metrics."""
+def chaos_context(chaos_injector: ChaosInjector, recorder: Recorder) -> ChaosContext:
+    """Fresh ChaosContext with injector and recorder."""
     from agent_chaos.core.context import ChaosContext
 
     return ChaosContext(
         name="test-context",
         injector=chaos_injector,
-        metrics=metrics_store,
+        recorder=recorder,
         session_id="test-session-123",
     )
 

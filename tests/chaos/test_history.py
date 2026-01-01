@@ -61,10 +61,11 @@ class TestHistoryMutateChaos:
             return msgs + [{"role": "system", "content": ctx.session_id}]
 
         chaos = HistoryMutateChaos(mutator=ctx_mutator)
+        from agent_chaos.core.recorder import Recorder
         ctx = ChaosContext(
             name="test",
             injector=ChaosInjector(chaos=[]),
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="session-abc",
         )
         result = chaos.apply(ctx=ctx, messages=[])

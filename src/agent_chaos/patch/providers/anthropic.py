@@ -11,7 +11,7 @@ from agent_chaos.patch.base import BaseProviderPatcher
 
 if TYPE_CHECKING:
     from agent_chaos.core.injector import ChaosInjector
-    from agent_chaos.core.metrics import MetricsStore
+    from agent_chaos.core.recorder import Recorder
 
 
 class AnthropicPatcher(BaseProviderPatcher):
@@ -22,15 +22,15 @@ class AnthropicPatcher(BaseProviderPatcher):
     def __init__(self):
         super().__init__()
         self._injector: ChaosInjector | None = None
-        self._metrics: MetricsStore | None = None
+        self._recorder: Recorder | None = None
 
-    def patch(self, injector: "ChaosInjector", metrics: "MetricsStore") -> None:
+    def patch(self, injector: "ChaosInjector", recorder: "Recorder") -> None:
         """Apply patches to Anthropic SDK."""
         if self._patched:
             return
 
         self._injector = injector
-        self._metrics = metrics
+        self._recorder = recorder
 
         try:
             from anthropic.resources import AsyncMessages, Messages
@@ -57,7 +57,7 @@ class AnthropicPatcher(BaseProviderPatcher):
     def _patch_sync_messages(self, messages_cls: type, path_prefix: str):
         """Patch sync Messages class (create and stream)."""
         injector = self._injector
-        metrics = self._metrics
+        recorder = self._recorder
 
         # Patch create
         self._save_original(f"{path_prefix}.create", messages_cls.create)
@@ -68,7 +68,7 @@ class AnthropicPatcher(BaseProviderPatcher):
             return _execute_with_chaos_sync(
                 lambda kw: original_create(self_msg, **kw),
                 injector,
-                metrics,
+                recorder,
                 kwargs,
             )
 
@@ -81,35 +81,35 @@ class AnthropicPatcher(BaseProviderPatcher):
 
             @wraps(original_stream)
             def patched_stream(self_msg, **kwargs):
-                call_id = metrics.start_call("anthropic")
+                call_id = recorder.start_call("anthropic")
                 call_number = injector.increment_call()
 
                 # Try to capture system prompt on every call (deduplication handled internally)
-                _maybe_record_system_prompt(kwargs, metrics)
+                _maybe_record_system_prompt(kwargs, recorder)
 
                 # Apply user input chaos on FIRST call only
                 if call_number == 1:
                     messages = kwargs.get("messages", [])
                     if messages:
                         mutated_messages, original_input = (
-                            _apply_user_chaos_to_messages(messages, injector, metrics)
+                            _apply_user_chaos_to_messages(messages, injector, recorder)
                         )
                         if original_input is not None and injector._ctx is not None:
                             injector._ctx.agent_input = original_input
                         kwargs = {**kwargs, "messages": mutated_messages}
 
                 # Apply context and tool mutations
-                kwargs = _maybe_mutate_context(kwargs, injector, metrics)
-                kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
+                kwargs = _maybe_mutate_context(kwargs, injector, recorder)
+                kwargs = _maybe_mutate_tools(kwargs, injector, recorder)
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
-                        metrics.record_fault(
+                        recorder.record_fault(
                             call_id,
                             chaos_result.exception,
                             provider="anthropic",
                             chaos_point="LLM",
                         )
-                        metrics.end_call(
+                        recorder.end_call(
                             call_id, success=False, error=chaos_result.exception
                         )
                         raise chaos_result.exception
@@ -117,7 +117,7 @@ class AnthropicPatcher(BaseProviderPatcher):
                 from agent_chaos.stream.anthropic import ChaosAnthropicStream
 
                 return ChaosAnthropicStream(
-                    original_stream(self_msg, **kwargs), injector, metrics, call_id
+                    original_stream(self_msg, **kwargs), injector, recorder, call_id
                 )
 
             messages_cls.stream = patched_stream
@@ -125,7 +125,7 @@ class AnthropicPatcher(BaseProviderPatcher):
     def _patch_async_messages(self, messages_cls: type, path_prefix: str):
         """Patch async Messages class (create only)."""
         injector = self._injector
-        metrics = self._metrics
+        recorder = self._recorder
 
         self._save_original(f"{path_prefix}.create", messages_cls.create)
         original_create = messages_cls.create
@@ -135,7 +135,7 @@ class AnthropicPatcher(BaseProviderPatcher):
             return await _execute_with_chaos_async(
                 lambda kw: original_create(self_msg, **kw),
                 injector,
-                metrics,
+                recorder,
                 kwargs,
             )
 
@@ -144,7 +144,7 @@ class AnthropicPatcher(BaseProviderPatcher):
     def _patch_beta_async_messages(self, messages_cls: type, path_prefix: str):
         """Patch beta async Messages class with streaming support."""
         injector = self._injector
-        metrics = self._metrics
+        recorder = self._recorder
 
         # Patch create (handles stream=True)
         self._save_original(f"{path_prefix}.create", messages_cls.create)
@@ -152,38 +152,38 @@ class AnthropicPatcher(BaseProviderPatcher):
 
         @wraps(original_create)
         async def patched_create(self_msg, **kwargs):
-            call_id = metrics.start_call("anthropic")
+            call_id = recorder.start_call("anthropic")
             call_number = injector.increment_call()
             is_streaming = kwargs.get("stream", False)
 
             # Try to capture system prompt on every call (deduplication handled internally)
-            _maybe_record_system_prompt(kwargs, metrics)
+            _maybe_record_system_prompt(kwargs, recorder)
 
             # Apply user input chaos on FIRST call only
             if call_number == 1:
                 messages = kwargs.get("messages", [])
                 if messages:
                     mutated_messages, original_input = _apply_user_chaos_to_messages(
-                        messages, injector, metrics
+                        messages, injector, recorder
                     )
                     if original_input is not None and injector._ctx is not None:
                         injector._ctx.agent_input = original_input
                     kwargs = {**kwargs, "messages": mutated_messages}
 
-            kwargs = _maybe_mutate_context(kwargs, injector, metrics)
-            kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
+            kwargs = _maybe_mutate_context(kwargs, injector, recorder)
+            kwargs = _maybe_mutate_tools(kwargs, injector, recorder)
             _maybe_record_anthropic_tool_results_in_request(
-                metrics, kwargs, current_call_id=call_id
+                recorder, kwargs, current_call_id=call_id
             )
             if chaos_result := injector.next_llm_chaos("anthropic"):
                 if chaos_result.exception:
-                    metrics.record_fault(
+                    recorder.record_fault(
                         call_id,
                         chaos_result.exception,
                         provider="anthropic",
                         chaos_point="LLM",
                     )
-                    metrics.end_call(
+                    recorder.end_call(
                         call_id, success=False, error=chaos_result.exception
                     )
                     raise chaos_result.exception
@@ -196,15 +196,15 @@ class AnthropicPatcher(BaseProviderPatcher):
                     from agent_chaos.stream.anthropic import ChaosAsyncStreamResponse
 
                     return ChaosAsyncStreamResponse(
-                        response, injector, metrics, call_id
+                        response, injector, recorder, call_id
                     )
 
-                metrics.record_latency(call_id, time.monotonic() - start)
-                _maybe_record_anthropic_response_metadata(metrics, call_id, response)
-                metrics.end_call(call_id, success=True)
+                recorder.record_latency(call_id, time.monotonic() - start)
+                _maybe_record_anthropic_response_metadata(recorder, call_id, response)
+                recorder.end_call(call_id, success=True)
                 return response
             except Exception as e:
-                metrics.end_call(call_id, success=False, error=e)
+                recorder.end_call(call_id, success=False, error=e)
                 raise
 
         messages_cls.create = patched_create
@@ -216,35 +216,35 @@ class AnthropicPatcher(BaseProviderPatcher):
 
             @wraps(original_stream)
             def patched_stream(self_msg, **kwargs):
-                call_id = metrics.start_call("anthropic")
+                call_id = recorder.start_call("anthropic")
                 call_number = injector.increment_call()
 
                 # Try to capture system prompt on every call (deduplication handled internally)
-                _maybe_record_system_prompt(kwargs, metrics)
+                _maybe_record_system_prompt(kwargs, recorder)
 
                 # Apply user input chaos on FIRST call only
                 if call_number == 1:
                     messages = kwargs.get("messages", [])
                     if messages:
                         mutated_messages, original_input = (
-                            _apply_user_chaos_to_messages(messages, injector, metrics)
+                            _apply_user_chaos_to_messages(messages, injector, recorder)
                         )
                         if original_input is not None and injector._ctx is not None:
                             injector._ctx.agent_input = original_input
                         kwargs = {**kwargs, "messages": mutated_messages}
 
                 # Apply context and tool mutations
-                kwargs = _maybe_mutate_context(kwargs, injector, metrics)
-                kwargs = _maybe_mutate_tools(kwargs, injector, metrics)
+                kwargs = _maybe_mutate_context(kwargs, injector, recorder)
+                kwargs = _maybe_mutate_tools(kwargs, injector, recorder)
                 if chaos_result := injector.next_llm_chaos("anthropic"):
                     if chaos_result.exception:
-                        metrics.record_fault(
+                        recorder.record_fault(
                             call_id,
                             chaos_result.exception,
                             provider="anthropic",
                             chaos_point="LLM",
                         )
-                        metrics.end_call(
+                        recorder.end_call(
                             call_id, success=False, error=chaos_result.exception
                         )
                         raise chaos_result.exception
@@ -252,7 +252,7 @@ class AnthropicPatcher(BaseProviderPatcher):
                 from agent_chaos.stream.anthropic import ChaosAsyncAnthropicStream
 
                 return ChaosAsyncAnthropicStream(
-                    original_stream(self_msg, **kwargs), injector, metrics, call_id
+                    original_stream(self_msg, **kwargs), injector, recorder, call_id
                 )
 
             messages_cls.stream = patched_stream
@@ -264,25 +264,25 @@ class AnthropicPatcher(BaseProviderPatcher):
 
 
 def _maybe_record_system_prompt(
-    kwargs: dict, metrics: "MetricsStore"
+    kwargs: dict, recorder: "Recorder"
 ) -> None:
     """Record system prompt from kwargs if present (only on first call)."""
     system = kwargs.get("system")
     if system is not None:
-        metrics.record_system_prompt(system)
+        recorder.record_system_prompt(system)
 
 
 def _maybe_mutate_tools(
-    kwargs: dict, injector: "ChaosInjector", metrics: "MetricsStore"
+    kwargs: dict, injector: "ChaosInjector", recorder: "Recorder"
 ) -> dict:
     """Mutate tool results if configured."""
     if not injector.should_mutate_tools():
         return kwargs
-    return _mutate_anthropic_tool_results(kwargs, injector, metrics)
+    return _mutate_anthropic_tool_results(kwargs, injector, recorder)
 
 
 def _maybe_record_anthropic_response_metadata(
-    metrics: "MetricsStore", call_id: str, response: Any
+    recorder: "Recorder", call_id: str, response: Any
 ) -> None:
     """Best-effort extraction of usage + tool_use blocks from an Anthropic response."""
     # Token usage
@@ -296,7 +296,7 @@ def _maybe_record_anthropic_response_metadata(
                 response, "model_name", None
             )
             if any(v is not None for v in [in_tok, out_tok, total, model]):
-                metrics.record_token_usage(
+                recorder.record_token_usage(
                     call_id,
                     input_tokens=in_tok,
                     output_tokens=out_tok,
@@ -339,7 +339,7 @@ def _maybe_record_anthropic_response_metadata(
                 except Exception:
                     input_bytes = None
                 if tool_name:
-                    metrics.record_tool_use(
+                    recorder.record_tool_use(
                         call_id,
                         tool_name=str(tool_name),
                         tool_use_id=str(tool_use_id) if tool_use_id else None,
@@ -349,7 +349,7 @@ def _maybe_record_anthropic_response_metadata(
                     )
                     # Non-intrusive inference: treat tool_use completion as tool_start.
                     if tool_use_id:
-                        metrics.record_tool_start(
+                        recorder.record_tool_start(
                             tool_name=str(tool_name),
                             tool_use_id=str(tool_use_id),
                             call_id=call_id,
@@ -361,11 +361,12 @@ def _maybe_record_anthropic_response_metadata(
 
 
 def _maybe_record_anthropic_tool_results_in_request(
-    metrics: "MetricsStore", mutated_kwargs: dict, *, current_call_id: str
+    recorder: "Recorder", mutated_kwargs: dict, *, current_call_id: str
 ) -> None:
     """Infer tool_end when we see tool_result blocks in a subsequent LLM request."""
     try:
         messages = mutated_kwargs.get("messages", []) or []
+        metrics = recorder.metrics
 
         # First pass: extract tool_use_id -> tool_name mapping from assistant messages
         # This ensures tool names are available even in streaming scenarios
@@ -388,7 +389,7 @@ def _maybe_record_anthropic_tool_results_in_request(
                                 # Also add to conversation if not already there
                                 if tool_id not in metrics._tool_use_in_conversation:
                                     metrics._tool_use_in_conversation.add(tool_id)
-                                    metrics.add_conversation_entry(
+                                    recorder.add_conversation_entry(
                                         "tool_call",
                                         tool_name=tool_name,
                                         tool_use_id=tool_id,
@@ -440,7 +441,7 @@ def _maybe_record_anthropic_tool_results_in_request(
                     )
                 except Exception:
                     out_bytes = None
-                metrics.record_tool_result_seen(
+                recorder.record_tool_result_seen(
                     tool_use_id=str(tool_use_id),
                     is_error=is_error,
                     output_bytes=out_bytes,
@@ -494,7 +495,7 @@ def _extract_last_user_text(messages: list[dict]) -> tuple[int, int | None, str 
 def _apply_user_chaos_to_messages(
     messages: list[dict],
     injector: "ChaosInjector",
-    metrics: "MetricsStore",
+    recorder: "Recorder",
 ) -> tuple[list[dict], str | None]:
     """Apply user input chaos to the messages array.
 
@@ -511,7 +512,7 @@ def _apply_user_chaos_to_messages(
 
     # Always record the original user message to conversation (for UI display)
     # Deduplication is handled automatically in add_conversation_entry
-    metrics.add_conversation_entry("user", content=original_text)
+    recorder.add_conversation_entry("user", content=original_text)
 
     # If no chaos configured, return early
     if not injector.has_user_chaos():
@@ -549,7 +550,7 @@ def _apply_user_chaos_to_messages(
         if doc:
             chaos_fn_doc = doc.strip().split("\n")[0]
 
-    metrics.record_fault(
+    recorder.record_fault(
         "user_input_mutation",
         chaos_obj,
         provider="",
@@ -624,7 +625,7 @@ def _compute_context_diff(original: list[dict], mutated: list[dict]) -> dict[str
 
 
 def _maybe_mutate_context(
-    kwargs: dict, injector: "ChaosInjector", metrics: "MetricsStore"
+    kwargs: dict, injector: "ChaosInjector", recorder: "Recorder"
 ) -> dict:
     """Apply context chaos to mutate the messages array."""
     messages = kwargs.get("messages", [])
@@ -647,7 +648,7 @@ def _maybe_mutate_context(
             # Compute detailed diff of what changed
             diff = _compute_context_diff(messages, chaos_result.mutated)
 
-            metrics.record_fault(
+            recorder.record_fault(
                 "context_mutation",
                 chaos_obj,
                 provider="anthropic",
@@ -669,24 +670,24 @@ def _maybe_mutate_context(
 def _execute_with_chaos_sync(
     execute_fn: Callable[[dict], Any],
     injector: "ChaosInjector",
-    metrics: "MetricsStore",
+    recorder: "Recorder",
     kwargs: dict,
 ) -> Any:
     """Execute sync call with chaos injection."""
-    call_id = metrics.start_call("anthropic")
+    call_id = recorder.start_call("anthropic")
     call_number = injector.increment_call()
 
     mutated_kwargs = kwargs
 
     # Try to capture system prompt on every call (deduplication handled internally)
-    _maybe_record_system_prompt(mutated_kwargs, metrics)
+    _maybe_record_system_prompt(mutated_kwargs, recorder)
 
     # Apply user input chaos on FIRST call only
     if call_number == 1:
         messages = mutated_kwargs.get("messages", [])
         if messages:
             mutated_messages, original_input = _apply_user_chaos_to_messages(
-                messages, injector, metrics
+                messages, injector, recorder
             )
             if original_input is not None:
                 # Store original user input in context
@@ -695,57 +696,57 @@ def _execute_with_chaos_sync(
             mutated_kwargs = {**mutated_kwargs, "messages": mutated_messages}
 
     # Apply context mutation (messages array)
-    mutated_kwargs = _maybe_mutate_context(mutated_kwargs, injector, metrics)
+    mutated_kwargs = _maybe_mutate_context(mutated_kwargs, injector, recorder)
     # Then apply tool result mutations
-    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, metrics)
+    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, recorder)
     _maybe_record_anthropic_tool_results_in_request(
-        metrics, mutated_kwargs, current_call_id=call_id
+        recorder, mutated_kwargs, current_call_id=call_id
     )
 
     if chaos_result := injector.next_llm_chaos("anthropic"):
         if chaos_result.exception:
-            metrics.record_fault(
+            recorder.record_fault(
                 call_id,
                 chaos_result.exception,
                 provider="anthropic",
                 chaos_point="LLM",
             )
-            metrics.end_call(call_id, success=False, error=chaos_result.exception)
+            recorder.end_call(call_id, success=False, error=chaos_result.exception)
             raise chaos_result.exception
 
     start = time.monotonic()
     try:
         response = execute_fn(mutated_kwargs)
-        metrics.record_latency(call_id, time.monotonic() - start)
-        _maybe_record_anthropic_response_metadata(metrics, call_id, response)
-        metrics.end_call(call_id, success=True)
+        recorder.record_latency(call_id, time.monotonic() - start)
+        _maybe_record_anthropic_response_metadata(recorder, call_id, response)
+        recorder.end_call(call_id, success=True)
         return response
     except Exception as e:
-        metrics.end_call(call_id, success=False, error=e)
+        recorder.end_call(call_id, success=False, error=e)
         raise
 
 
 async def _execute_with_chaos_async(
     execute_fn: Callable[[dict], Any],
     injector: "ChaosInjector",
-    metrics: "MetricsStore",
+    recorder: "Recorder",
     kwargs: dict,
 ) -> Any:
     """Execute async call with chaos injection."""
-    call_id = metrics.start_call("anthropic")
+    call_id = recorder.start_call("anthropic")
     call_number = injector.increment_call()
 
     mutated_kwargs = kwargs
 
     # Try to capture system prompt on every call (deduplication handled internally)
-    _maybe_record_system_prompt(mutated_kwargs, metrics)
+    _maybe_record_system_prompt(mutated_kwargs, recorder)
 
     # Apply user input chaos on FIRST call only
     if call_number == 1:
         messages = mutated_kwargs.get("messages", [])
         if messages:
             mutated_messages, original_input = _apply_user_chaos_to_messages(
-                messages, injector, metrics
+                messages, injector, recorder
             )
             if original_input is not None:
                 # Store original user input in context
@@ -754,38 +755,38 @@ async def _execute_with_chaos_async(
             mutated_kwargs = {**mutated_kwargs, "messages": mutated_messages}
 
     # Apply context mutation (messages array)
-    mutated_kwargs = _maybe_mutate_context(mutated_kwargs, injector, metrics)
+    mutated_kwargs = _maybe_mutate_context(mutated_kwargs, injector, recorder)
     # Then apply tool result mutations
-    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, metrics)
+    mutated_kwargs = _maybe_mutate_tools(mutated_kwargs, injector, recorder)
     _maybe_record_anthropic_tool_results_in_request(
-        metrics, mutated_kwargs, current_call_id=call_id
+        recorder, mutated_kwargs, current_call_id=call_id
     )
 
     if chaos_result := injector.next_llm_chaos("anthropic"):
         if chaos_result.exception:
-            metrics.record_fault(
+            recorder.record_fault(
                 call_id,
                 chaos_result.exception,
                 provider="anthropic",
                 chaos_point="LLM",
             )
-            metrics.end_call(call_id, success=False, error=chaos_result.exception)
+            recorder.end_call(call_id, success=False, error=chaos_result.exception)
             raise chaos_result.exception
 
     start = time.monotonic()
     try:
         response = await execute_fn(mutated_kwargs)
-        metrics.record_latency(call_id, time.monotonic() - start)
-        _maybe_record_anthropic_response_metadata(metrics, call_id, response)
-        metrics.end_call(call_id, success=True)
+        recorder.record_latency(call_id, time.monotonic() - start)
+        _maybe_record_anthropic_response_metadata(recorder, call_id, response)
+        recorder.end_call(call_id, success=True)
         return response
     except Exception as e:
-        metrics.end_call(call_id, success=False, error=e)
+        recorder.end_call(call_id, success=False, error=e)
         raise
 
 
 def _mutate_anthropic_tool_results(
-    kwargs: dict, injector: "ChaosInjector", metrics: "MetricsStore"
+    kwargs: dict, injector: "ChaosInjector", recorder: "Recorder"
 ) -> dict:
     """Mutate tool_result blocks in messages using new chaos system."""
     messages = kwargs.get("messages", [])
@@ -845,7 +846,7 @@ def _mutate_anthropic_tool_results(
                                     if doc:
                                         # Get first line of docstring
                                         chaos_fn_doc = doc.strip().split("\n")[0]
-                                metrics.record_fault(
+                                recorder.record_fault(
                                     "tool_mutation",
                                     chaos_obj,
                                     provider="anthropic",

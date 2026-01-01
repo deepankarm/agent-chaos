@@ -9,6 +9,7 @@ from agent_chaos.chaos.context import ContextMutateChaos, context_mutate
 from agent_chaos.core.context import ChaosContext
 from agent_chaos.core.injector import ChaosInjector
 from agent_chaos.core.metrics import MetricsStore
+from agent_chaos.core.recorder import Recorder
 from agent_chaos.types import ChaosAction
 
 
@@ -55,7 +56,7 @@ class TestContextMutateChaos:
         ctx = ChaosContext(
             name="my-context",
             injector=ChaosInjector(chaos=[]),
-            metrics=MetricsStore(),
+            recorder=Recorder(metrics=MetricsStore()),
             session_id="test-123",
         )
         messages = [{"role": "user", "content": "hello"}]

@@ -9,7 +9,7 @@ from agent_chaos.patch.discovery import get_available_providers, load_providers
 
 if TYPE_CHECKING:
     from agent_chaos.core.injector import ChaosInjector
-    from agent_chaos.core.metrics import MetricsStore
+    from agent_chaos.core.recorder import Recorder
 
 
 class ChaosPatcher:
@@ -19,9 +19,9 @@ class ChaosPatcher:
     Providers are lazily loaded based on what's installed.
     """
 
-    def __init__(self, injector: "ChaosInjector", metrics: "MetricsStore"):
+    def __init__(self, injector: "ChaosInjector", recorder: "Recorder"):
         self.injector = injector
-        self.metrics = metrics
+        self.recorder = recorder
         self._providers: list[BaseProviderPatcher] = []
         self._patched = False
 
@@ -30,7 +30,7 @@ class ChaosPatcher:
         if self._patched:
             return
         for provider in self._providers:
-            provider.patch(self.injector, self.metrics)
+            provider.patch(self.injector, self.recorder)
         self._patched = True
 
     def patch_providers(self, provider_names: list[str]):
@@ -43,7 +43,7 @@ class ChaosPatcher:
             return
         self._providers = load_providers(provider_names)
         for provider in self._providers:
-            provider.patch(self.injector, self.metrics)
+            provider.patch(self.injector, self.recorder)
         self._patched = True
 
     def unpatch_all(self):
