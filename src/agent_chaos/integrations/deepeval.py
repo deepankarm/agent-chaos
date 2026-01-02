@@ -82,7 +82,7 @@ def _extract_tools_called(ctx: "ChaosContext") -> list[Any]:
     from deepeval.test_case import ToolCall
 
     tools_called = []
-    for entry in ctx.metrics.conversation:
+    for entry in ctx.metrics.conv.entries:
         if entry.get("type") == "tool_call":
             tool_name = entry.get("tool_name", entry.get("name", "unknown"))
             tools_called.append(
@@ -112,7 +112,7 @@ def _extract_tools_called(ctx: "ChaosContext") -> list[Any]:
 def _extract_retrieval_context(ctx: "ChaosContext") -> list[str]:
     """Extract retrieval context (tool results) from conversation."""
     context = []
-    for entry in ctx.metrics.conversation:
+    for entry in ctx.metrics.conv.entries:
         if entry.get("type") == "tool_result":
             result = entry.get("result")
             if result:
@@ -151,7 +151,7 @@ def _extract_chaos_context(ctx: "ChaosContext", turn: int | None = None) -> str 
     Returns a string describing what chaos was injected, or None if no chaos.
     """
     chaos_events = []
-    for entry in ctx.metrics.conversation:
+    for entry in ctx.metrics.conv.entries:
         if entry.get("type") == "chaos":
             event_turn = entry.get("turn_number", 0)
             # If evaluating a specific turn, only include chaos up to that turn
@@ -277,7 +277,7 @@ def build_conversational_test_case(
     current_turn_entries: list[dict[str, Any]] = []
     current_turn_number = 0
 
-    for entry in ctx.metrics.conversation:
+    for entry in ctx.metrics.conv.entries:
         entry_type = entry.get("type")
         turn_num = entry.get("turn_number", 0)
 

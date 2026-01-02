@@ -379,16 +379,15 @@ def _maybe_record_anthropic_tool_results_in_request(
                             tool_id = block.get("id", "")
                             tool_name = block.get("name", "unknown")
                             tool_input = block.get("input")
-                            if tool_id and tool_name:
+                            if tool_id and tool_name and metrics:
                                 # Populate the mapping for later lookup
-                                if tool_id not in metrics._tool_use_to_tool_name:
-                                    metrics._tool_use_to_tool_name[tool_id] = tool_name
-                                    metrics._tool_use_to_call_id[tool_id] = (
-                                        current_call_id
+                                if metrics.get_tool_name(tool_id) == "unknown":
+                                    metrics.register_tool_use(
+                                        tool_id, tool_name, current_call_id
                                     )
                                 # Also add to conversation if not already there
-                                if tool_id not in metrics._tool_use_in_conversation:
-                                    metrics._tool_use_in_conversation.add(tool_id)
+                                if not metrics.is_tool_in_conversation(tool_id):
+                                    metrics.mark_tool_in_conversation(tool_id)
                                     recorder.add_conversation_entry(
                                         "tool_call",
                                         tool_name=tool_name,

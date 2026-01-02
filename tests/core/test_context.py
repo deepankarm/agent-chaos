@@ -72,12 +72,12 @@ class TestChaosContextTurnTracking:
     def test_start_turn_updates_metrics_turn(self, ctx: ChaosContext) -> None:
         ctx.start_turn(2, "Test input")
         # The metrics should have the current turn set
-        assert ctx.metrics._current_turn == 2
+        assert ctx.metrics.conv.current_turn == 2
 
     def test_start_turn_resets_user_message_flag(self, ctx: ChaosContext) -> None:
-        ctx.metrics._user_message_recorded = True
+        ctx.metrics.conv.user_message_recorded = True
         ctx.start_turn(1, "Hello")
-        assert ctx.metrics._user_message_recorded is False
+        assert ctx.metrics.conv.user_message_recorded is False
 
     def test_end_turn_returns_turn_result(self, ctx: ChaosContext) -> None:
         ctx.start_turn(1, "Hello")
@@ -127,16 +127,30 @@ class TestChaosContextTurnTracking:
     def test_end_turn_tracks_llm_calls(self, ctx: ChaosContext) -> None:
         ctx.start_turn(1, "Hello")
         # Simulate some LLM calls
-        ctx.metrics.call_count = 3
+        ctx.metrics.calls.count = 3
         result = ctx.end_turn("Hello", "Hi!", True)
         assert result.llm_calls == 3
 
     def test_end_turn_tracks_tokens(self, ctx: ChaosContext) -> None:
+        from agent_chaos.core.metrics import CallRecord
+
         ctx.start_turn(1, "Hello")
-        # Simulate token usage via call_history
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 100, "output_tokens": 50}},
-            {"usage": {"input_tokens": 80, "output_tokens": 40}},
+        # Simulate token usage via history
+        ctx.metrics.history = [
+            CallRecord(
+                call_id="1",
+                provider="test",
+                success=True,
+                latency=0.1,
+                usage={"input_tokens": 100, "output_tokens": 50},
+            ),
+            CallRecord(
+                call_id="2",
+                provider="test",
+                success=True,
+                latency=0.1,
+                usage={"input_tokens": 80, "output_tokens": 40},
+            ),
         ]
         result = ctx.end_turn("Hello", "Hi!", True)
         assert result.input_tokens == 180

@@ -150,8 +150,8 @@ class TestRecorderSpans:
 
         call_id = recorder.start_span("anthropic")
 
-        assert metrics.call_count == 1
-        assert call_id in metrics._active_calls
+        assert metrics.calls.count == 1
+        assert metrics.get_active_call(call_id) is not None
 
     def test_end_span(self) -> None:
         """end_span should emit SpanEndEvent."""
@@ -254,7 +254,7 @@ class TestRecorderFaults:
 
         recorder.record_fault("call1", "TestError", chaos_point="LLM")
 
-        assert len(metrics.faults_injected) == 1
+        assert len(metrics.faults) == 1
 
 
 class TestRecorderTTFT:
@@ -501,9 +501,9 @@ class TestRecorderIntegration:
         assert len(sink) == 9  # trace_start, span_start, ttft, tokens, tool_use, tool_start, tool_end, span_end, trace_end
 
         # Verify metrics tracked data
-        assert metrics.call_count == 1
-        assert len(metrics.call_history) == 1
-        assert metrics.call_history[0]["success"] is True
+        assert metrics.calls.count == 1
+        assert len(metrics.history) == 1
+        assert metrics.history[0].success is True
 
         # Verify trace end has stats
         trace_end = sink.events[-1]
@@ -520,11 +520,11 @@ class TestRecorderIntegration:
         recorder.start_trace("fault-test")
         call_id = recorder.start_span("anthropic")
         recorder.record_fault(call_id, "RateLimitError", chaos_point="LLM")
-        recorder.end_span(call_id, success=False, error="Rate limit exceeded")
+        recorder.end_span(call_id, success=False, error=Exception("Rate limit exceeded"))
         recorder.end_trace(success=False, error="Chaos induced failure")
 
         # Check metrics tracked fault
-        assert len(metrics.faults_injected) == 1
+        assert len(metrics.faults) == 1
 
         # Check trace end
         trace_end = sink.events[-1]

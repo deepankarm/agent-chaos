@@ -134,11 +134,9 @@ class Recorder:
         failed_calls = 0
         fault_count = 0
         if self._metrics:
-            total_calls = self._metrics.call_count
-            failed_calls = sum(
-                1 for c in self._metrics.call_history if not c.get("success", True)
-            )
-            fault_count = len(self._metrics.faults_injected)
+            total_calls = self._metrics.calls.count
+            failed_calls = sum(1 for c in self._metrics.history if not c.success)
+            fault_count = len(self._metrics.faults)
 
         self._sink.emit(
             TraceEndEvent(
@@ -204,11 +202,10 @@ class Recorder:
 
         if self._metrics:
             # Get provider and latency from metrics before ending
-            call_info = self._metrics._active_calls.get(call_id, {})
-            provider = call_info.get("provider", "")
-            start_time = call_info.get("start_time")
-            if start_time:
-                latency_ms = (time.monotonic() - start_time) * 1000
+            call_info = self._metrics.get_active_call(call_id)
+            if call_info:
+                provider = call_info.provider
+                latency_ms = (time.monotonic() - call_info.start_time) * 1000
 
             self._metrics.end_call(call_id, success=success, error=error)
 
@@ -401,8 +398,7 @@ class Recorder:
                 model=model,
                 provider=provider,
             )
-            cumulative_input = self._metrics._cumulative_input_tokens
-            cumulative_output = self._metrics._cumulative_output_tokens
+            cumulative_input, cumulative_output = self._metrics.get_cumulative_tokens()
 
         self._sink.emit(
             TokenUsageEvent(
@@ -604,13 +600,13 @@ class Recorder:
             return
 
         # Check if already processed
-        if tool_use_id in self._metrics._tool_use_ended:
+        if self._metrics.is_tool_ended(tool_use_id):
             return
 
-        self._metrics._tool_use_ended.add(tool_use_id)
+        self._metrics.mark_tool_ended(tool_use_id)
 
-        tool_name = self._metrics._tool_use_to_tool_name.get(tool_use_id, "unknown")
-        started_at = self._metrics._tool_use_started_at.get(tool_use_id)
+        tool_name = self._metrics.get_tool_name(tool_use_id)
+        started_at = self._metrics.get_tool_start_time(tool_use_id)
         duration_ms = (time.monotonic() - started_at) * 1000 if started_at else None
         success = not bool(is_error)
 

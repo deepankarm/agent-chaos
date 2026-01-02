@@ -46,10 +46,9 @@ class BaseStreamFaultMixin(ABC):
             # Get call start time from metrics
             metrics = self._recorder.metrics
             if metrics:
-                call_info = metrics._active_calls.get(self._call_id)
+                call_info = metrics.get_active_call(self._call_id)
                 if call_info:
-                    call_start_time = call_info["start_time"]
-                    ttft_ms = (time.monotonic() - call_start_time) * 1000
+                    ttft_ms = (time.monotonic() - call_info.start_time) * 1000
                     self._recorder.record_ttft(self._call_id, ttft_ms, is_delayed=bool(delay))
 
             # Apply delay fault if configured
@@ -65,10 +64,9 @@ class BaseStreamFaultMixin(ABC):
             # Get call start time from metrics
             metrics = self._recorder.metrics
             if metrics:
-                call_info = metrics._active_calls.get(self._call_id)
+                call_info = metrics.get_active_call(self._call_id)
                 if call_info:
-                    call_start_time = call_info["start_time"]
-                    ttft_ms = (time.monotonic() - call_start_time) * 1000
+                    ttft_ms = (time.monotonic() - call_info.start_time) * 1000
                     self._recorder.record_ttft(self._call_id, ttft_ms, is_delayed=bool(delay))
 
             # Apply delay fault if configured

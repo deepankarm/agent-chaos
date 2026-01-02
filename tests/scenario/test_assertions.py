@@ -7,7 +7,7 @@ import pytest
 from agent_chaos.core.context import ChaosContext
 from agent_chaos.scenario.model import TurnResult
 from agent_chaos.core.injector import ChaosInjector
-from agent_chaos.core.metrics import MetricsStore
+from agent_chaos.core.metrics import MetricsStore, CallRecord, FaultRecord
 from agent_chaos.scenario.assertions import (
     AllTurnsComplete,
     AssertionResult,
@@ -66,14 +66,14 @@ def ctx_with_turns() -> ChaosContext:
 @pytest.fixture
 def ctx_with_history(ctx: ChaosContext) -> ChaosContext:
     """ChaosContext with call history."""
-    ctx.metrics.call_history = [
-        {"success": True, "latency": 0.5, "usage": {"input_tokens": 100, "output_tokens": 50}},
-        {"success": True, "latency": 1.0, "usage": {"input_tokens": 200, "output_tokens": 100}},
-        {"success": False, "latency": 0.2, "usage": {"input_tokens": 50, "output_tokens": 0}},
+    ctx.metrics.history = [
+        CallRecord(call_id="c1", provider="test", success=True, latency=0.5, usage={"input_tokens": 100, "output_tokens": 50}),
+        CallRecord(call_id="c2", provider="test", success=True, latency=1.0, usage={"input_tokens": 200, "output_tokens": 100}),
+        CallRecord(call_id="c3", provider="test", success=False, latency=0.2, usage={"input_tokens": 50, "output_tokens": 0}),
     ]
-    ctx.metrics.call_count = 3
-    ctx.metrics.latencies = [0.5, 1.0]
-    ctx.metrics._ttft_times = [0.1, 0.2]
+    ctx.metrics.calls.count = 3
+    ctx.metrics.calls.latencies = [0.5, 1.0]
+    ctx.metrics.stream.ttft_times = [0.1, 0.2]
     return ctx
 
 
@@ -138,32 +138,32 @@ class TestMaxLLMCalls:
     """Tests for MaxLLMCalls assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MaxLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is True
         assert "llm_calls=5" in result.message
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 15
+        ctx.metrics.calls.count = 15
         assertion = MaxLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_passes_at_exactly_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 10
+        ctx.metrics.calls.count = 10
         assertion = MaxLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_custom_name(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MaxLLMCalls(max_calls=10, name="call_limit")
         result = assertion(ctx)
         assert result.name == "call_limit"
 
     def test_includes_values(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MaxLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.measured == 5
@@ -174,25 +174,25 @@ class TestMinLLMCalls:
     """Tests for MinLLMCalls assertion."""
 
     def test_passes_when_above_minimum(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MinLLMCalls(min_calls=3)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_below_minimum(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 2
+        ctx.metrics.calls.count = 2
         assertion = MinLLMCalls(min_calls=5)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_custom_name(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MinLLMCalls(min_calls=3, name="min_call_check")
         result = assertion(ctx)
         assert result.name == "min_call_check"
 
     def test_includes_values(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MinLLMCalls(min_calls=3)
         result = assertion(ctx)
         assert result.measured == 5
@@ -203,19 +203,26 @@ class TestMinChaosInjected:
     """Tests for MinChaosInjected assertion."""
 
     def test_passes_when_above_minimum(self, ctx: ChaosContext) -> None:
-        ctx.metrics.faults_injected = [("c1", "e1"), ("c2", "e2"), ("c3", "e3")]
+        ctx.metrics.faults = [
+            FaultRecord(call_id="c1", fault_type="e1"),
+            FaultRecord(call_id="c2", fault_type="e2"),
+            FaultRecord(call_id="c3", fault_type="e3"),
+        ]
         assertion = MinChaosInjected(min_chaos=2)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_below_minimum(self, ctx: ChaosContext) -> None:
-        ctx.metrics.faults_injected = [("c1", "e1")]
+        ctx.metrics.faults = [FaultRecord(call_id="c1", fault_type="e1")]
         assertion = MinChaosInjected(min_chaos=3)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_passes_at_exactly_minimum(self, ctx: ChaosContext) -> None:
-        ctx.metrics.faults_injected = [("c1", "e1"), ("c2", "e2")]
+        ctx.metrics.faults = [
+            FaultRecord(call_id="c1", fault_type="e1"),
+            FaultRecord(call_id="c2", fault_type="e2"),
+        ]
         assertion = MinChaosInjected(min_chaos=2)
         result = assertion(ctx)
         assert result.passed is True
@@ -225,39 +232,39 @@ class TestMaxFailedCalls:
     """Tests for MaxFailedCalls assertion."""
 
     def test_passes_when_no_failures(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"success": True},
-            {"success": True},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1),
         ]
         assertion = MaxFailedCalls(max_failed=0)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_too_many_failures(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"success": False},
-            {"success": False},
-            {"success": True},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=False, latency=0.1),
+            CallRecord(call_id="c2", provider="test", success=False, latency=0.1),
+            CallRecord(call_id="c3", provider="test", success=True, latency=0.1),
         ]
         assertion = MaxFailedCalls(max_failed=1)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_passes_at_exactly_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"success": True},
-            {"success": False},
-            {"success": True},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1),
+            CallRecord(call_id="c2", provider="test", success=False, latency=0.1),
+            CallRecord(call_id="c3", provider="test", success=True, latency=0.1),
         ]
         assertion = MaxFailedCalls(max_failed=1)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_with_all_failures(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"success": False},
-            {"success": False},
-            {"success": False},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=False, latency=0.1),
+            CallRecord(call_id="c2", provider="test", success=False, latency=0.1),
+            CallRecord(call_id="c3", provider="test", success=False, latency=0.1),
         ]
         assertion = MaxFailedCalls(max_failed=2)
         result = assertion(ctx)
@@ -501,25 +508,25 @@ class TestMaxTotalLLMCalls:
     """Tests for MaxTotalLLMCalls assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MaxTotalLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 15
+        ctx.metrics.calls.count = 15
         assertion = MaxTotalLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_passes_at_exactly_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 10
+        ctx.metrics.calls.count = 10
         assertion = MaxTotalLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_includes_values_in_result(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_count = 5
+        ctx.metrics.calls.count = 5
         assertion = MaxTotalLLMCalls(max_calls=10)
         result = assertion(ctx)
         assert result.measured == 5
@@ -530,24 +537,24 @@ class TestMaxTokens:
     """Tests for MaxTokens assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 2000, "output_tokens": 3000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 2000, "output_tokens": 3000}),
         ]
         assertion = MaxTokens(max_tokens=10000)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 8000, "output_tokens": 7000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 8000, "output_tokens": 7000}),
         ]
         assertion = MaxTokens(max_tokens=10000)
         result = assertion(ctx)
         assert result.passed is False
 
     def test_includes_values(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 100, "output_tokens": 50}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 100, "output_tokens": 50}),
         ]
         assertion = MaxTokens(max_tokens=500)
         result = assertion(ctx)
@@ -559,18 +566,18 @@ class TestMaxInputTokens:
     """Tests for MaxInputTokens assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 3000, "output_tokens": 2000}},
-            {"usage": {"input_tokens": 2000, "output_tokens": 1000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 3000, "output_tokens": 2000}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 2000, "output_tokens": 1000}),
         ]
         assertion = MaxInputTokens(max_tokens=10000)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 5000, "output_tokens": 1000}},
-            {"usage": {"input_tokens": 6000, "output_tokens": 2000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 5000, "output_tokens": 1000}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 6000, "output_tokens": 2000}),
         ]
         assertion = MaxInputTokens(max_tokens=10000)
         result = assertion(ctx)
@@ -582,18 +589,18 @@ class TestMaxOutputTokens:
     """Tests for MaxOutputTokens assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 3000, "output_tokens": 2000}},
-            {"usage": {"input_tokens": 2000, "output_tokens": 3000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 3000, "output_tokens": 2000}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 2000, "output_tokens": 3000}),
         ]
         assertion = MaxOutputTokens(max_tokens=10000)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 1000, "output_tokens": 6000}},
-            {"usage": {"input_tokens": 1000, "output_tokens": 5000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 1000, "output_tokens": 6000}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 1000, "output_tokens": 5000}),
         ]
         assertion = MaxOutputTokens(max_tokens=10000)
         result = assertion(ctx)
@@ -605,18 +612,18 @@ class TestMaxTokensPerCall:
     """Tests for MaxTokensPerCall assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 500, "output_tokens": 500}},
-            {"usage": {"input_tokens": 400, "output_tokens": 400}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 500, "output_tokens": 500}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 400, "output_tokens": 400}),
         ]
         assertion = MaxTokensPerCall(max_tokens=2000)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 500, "output_tokens": 500}},
-            {"usage": {"input_tokens": 1500, "output_tokens": 1500}},  # 3000 total exceeds 2000
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 500, "output_tokens": 500}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 1500, "output_tokens": 1500}),  # 3000 total exceeds 2000
         ]
         assertion = MaxTokensPerCall(max_tokens=2000)
         result = assertion(ctx)
@@ -627,18 +634,18 @@ class TestMaxInputTokensPerCall:
     """Tests for MaxInputTokensPerCall assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 100}},
-            {"usage": {"input_tokens": 200}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 100}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 200}),
         ]
         assertion = MaxInputTokensPerCall(max_tokens=500)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"input_tokens": 100}},
-            {"usage": {"input_tokens": 1000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"input_tokens": 100}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"input_tokens": 1000}),
         ]
         assertion = MaxInputTokensPerCall(max_tokens=500)
         result = assertion(ctx)
@@ -649,18 +656,18 @@ class TestMaxOutputTokensPerCall:
     """Tests for MaxOutputTokensPerCall assertion."""
 
     def test_passes_when_within_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"output_tokens": 100}},
-            {"usage": {"output_tokens": 200}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"output_tokens": 100}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"output_tokens": 200}),
         ]
         assertion = MaxOutputTokensPerCall(max_tokens=500)
         result = assertion(ctx)
         assert result.passed is True
 
     def test_fails_when_exceeds_limit(self, ctx: ChaosContext) -> None:
-        ctx.metrics.call_history = [
-            {"usage": {"output_tokens": 100}},
-            {"usage": {"output_tokens": 1000}},
+        ctx.metrics.history = [
+            CallRecord(call_id="c1", provider="test", success=True, latency=0.1, usage={"output_tokens": 100}),
+            CallRecord(call_id="c2", provider="test", success=True, latency=0.1, usage={"output_tokens": 1000}),
         ]
         assertion = MaxOutputTokensPerCall(max_tokens=500)
         result = assertion(ctx)
