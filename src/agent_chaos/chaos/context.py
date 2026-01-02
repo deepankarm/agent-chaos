@@ -1,26 +1,25 @@
 """Context chaos types — mutate messages array."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import inspect
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
 
-if TYPE_CHECKING:
-    from agent_chaos.core.context import ChaosContext
+
+# Type alias for context mutators
+# The actual signature is detected at runtime in _build_trigger_and_detect_mutator
+ContextMutator = Callable[..., list]
 
 
-# Type aliases for context mutators
-ContextMutator = Callable[[list], list]  # (messages) -> messages
-ContextMutatorWithCtx = Callable[
-    ["ChaosContext", list], list
-]  # (ctx, messages) -> messages
-
-
-@dataclass
-class ContextChaos:
+class ContextChaos(BaseModel):
     """Base class for context/messages chaos."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     on_call: int | None = None
     after_calls: int | None = None
@@ -31,9 +30,11 @@ class ContextChaos:
     on_turn: int | None = None
     after_turns: int | None = None
     between_turns: tuple[int, int] | None = None
-    _trigger: TriggerConfig = field(init=False)
 
-    def __post_init__(self):
+    _trigger: TriggerConfig = PrivateAttr()
+
+    @model_validator(mode="after")
+    def _build_trigger(self) -> ContextChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -44,6 +45,7 @@ class ContextChaos:
             after_turns=self.after_turns,
             between_turns=self.between_turns,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -65,12 +67,35 @@ class ContextChaos:
         return ChaosResult.proceed()
 
 
-@dataclass
 class ContextMutateChaos(ContextChaos):
     """Custom context mutation using user-provided function."""
 
-    mutator: ContextMutator | ContextMutatorWithCtx | None = None
-    _accepts_ctx: bool = field(init=False, default=False)
+    mutator: ContextMutator | None = None
+
+    _accepts_ctx: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="after")
+    def _build_trigger_and_detect_mutator(self) -> ContextMutateChaos:
+        # Build trigger
+        self._trigger = TriggerConfig(
+            on_call=self.on_call,
+            after_calls=self.after_calls,
+            probability=self.probability,
+            provider=self.provider,
+            always=self.always,
+            on_turn=self.on_turn,
+            after_turns=self.after_turns,
+            between_turns=self.between_turns,
+        )
+        # Detect if mutator accepts ChaosContext
+        if self.mutator is not None:
+            sig = inspect.signature(self.mutator)
+            params = list(sig.parameters.keys())
+            # If first param is 'ctx' or there are 2 params, assume it wants ChaosContext
+            self._accepts_ctx = len(params) >= 2 or (
+                len(params) > 0 and params[0] == "ctx"
+            )
+        return self
 
     def __str__(self) -> str:
         fn_name = (
@@ -82,17 +107,6 @@ class ContextMutateChaos(ContextChaos):
         elif self.after_calls is not None:
             trigger = f" after {self.after_calls} calls"
         return f"context_mutate[{fn_name}]{trigger}"
-
-    def __post_init__(self):
-        super().__post_init__()
-        # Detect if mutator accepts ChaosContext
-        if self.mutator is not None:
-            sig = inspect.signature(self.mutator)
-            params = list(sig.parameters.keys())
-            # If first param is 'ctx' or there are 2 params, assume it wants ChaosContext
-            self._accepts_ctx = len(params) >= 2 or (
-                len(params) > 0 and params[0] == "ctx"
-            )
 
     def apply(self, **kwargs: Any) -> ChaosResult:
         if self.mutator is None:
@@ -112,7 +126,7 @@ class ContextMutateChaos(ContextChaos):
 # Factory functions
 
 
-def context_mutate(fn: ContextMutator | ContextMutatorWithCtx) -> ChaosBuilder:
+def context_mutate(fn: ContextMutator) -> ChaosBuilder:
     """Create a custom context mutation chaos.
 
     Args:

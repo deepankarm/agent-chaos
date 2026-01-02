@@ -14,8 +14,10 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import inspect
 from typing import TYPE_CHECKING, Any, Callable
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
@@ -24,14 +26,15 @@ if TYPE_CHECKING:
     from agent_chaos.core.context import ChaosContext
 
 
-@dataclass
-class HistoryMutateChaos:
+class HistoryMutateChaos(BaseModel):
     """Custom history/context mutation between turns.
 
     The mutator function can have one of two signatures:
     - Simple: (messages: list) -> list
     - Advanced: (ctx: ChaosContext, messages: list) -> list
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     mutator: Callable[..., list[dict[str, Any]]]
 
@@ -45,9 +48,10 @@ class HistoryMutateChaos:
     provider: str | None = None
     always: bool = False
 
-    _trigger: TriggerConfig = field(init=False, repr=False)
+    _trigger: TriggerConfig = PrivateAttr()
 
-    def __post_init__(self):
+    @model_validator(mode="after")
+    def _build_trigger(self) -> HistoryMutateChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -58,6 +62,7 @@ class HistoryMutateChaos:
             provider=self.provider,
             always=self.always,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -69,13 +74,11 @@ class HistoryMutateChaos:
     def apply(
         self,
         messages: list[dict[str, Any]] | None = None,
-        ctx: "ChaosContext | None" = None,
+        ctx: ChaosContext | None = None,
         **kwargs: Any,
     ) -> ChaosResult:
         if messages is None:
             return ChaosResult.proceed()
-
-        import inspect
 
         sig = inspect.signature(self.mutator)
         params = list(sig.parameters.keys())
@@ -88,13 +91,14 @@ class HistoryMutateChaos:
         return ChaosResult.mutate(mutated)
 
 
-@dataclass
-class HistoryTruncateChaos:
+class HistoryTruncateChaos(BaseModel):
     """Truncate conversation history to simulate context window pressure.
 
     This removes older messages, keeping only the most recent ones.
     Useful for testing how agents handle lost context.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     keep_last: int = 3  # Number of recent messages to keep
     keep_system: bool = True  # Always keep system messages
@@ -109,9 +113,10 @@ class HistoryTruncateChaos:
     provider: str | None = None
     always: bool = False
 
-    _trigger: TriggerConfig = field(init=False, repr=False)
+    _trigger: TriggerConfig = PrivateAttr()
 
-    def __post_init__(self):
+    @model_validator(mode="after")
+    def _build_trigger(self) -> HistoryTruncateChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -122,6 +127,7 @@ class HistoryTruncateChaos:
             provider=self.provider,
             always=self.always,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -153,13 +159,14 @@ class HistoryTruncateChaos:
         return ChaosResult.mutate(truncated)
 
 
-@dataclass
-class HistoryInjectChaos:
+class HistoryInjectChaos(BaseModel):
     """Inject fake messages into conversation history.
 
     This adds messages that weren't part of the actual conversation,
     simulating memory system errors or multi-agent handoff corruption.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     messages: list[dict[str, Any]]  # Messages to inject
     position: str = "end"  # "start", "end", or "random"
@@ -174,9 +181,10 @@ class HistoryInjectChaos:
     provider: str | None = None
     always: bool = False
 
-    _trigger: TriggerConfig = field(init=False, repr=False)
+    _trigger: TriggerConfig = PrivateAttr()
 
-    def __post_init__(self):
+    @model_validator(mode="after")
+    def _build_trigger(self) -> HistoryInjectChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -187,6 +195,7 @@ class HistoryInjectChaos:
             provider=self.provider,
             always=self.always,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:

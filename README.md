@@ -4,6 +4,10 @@
 
 <img src="src/agent_chaos/ui/static/favicon.svg" width="150" height="150" alt="agent-chaos logo">
 
+[![CI](https://github.com/deepankarm/agent-chaos/actions/workflows/ci.yml/badge.svg)](https://github.com/deepankarm/agent-chaos/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/deepankarm/agent-chaos/graph/badge.svg)](https://codecov.io/gh/deepankarm/agent-chaos)
+[![PyPI version](https://badge.fury.io/py/agent-chaos.svg)](https://pypi.org/project/agent-chaos/)
+
 **Chaos engineering for AI agents.**
 
 > *"Introduce a little anarchy. Upset the established order, and everything becomes chaos. I'm an agent of chaos. Oh, and you know the thing about chaos? It's fair!"*

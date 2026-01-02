@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from agent_chaos.chaos.base import Chaos, ChaosPoint, ChaosResult
 from agent_chaos.chaos.builder import ChaosBuilder
+from agent_chaos.types import ChaosAction
 
 if TYPE_CHECKING:
     from agent_chaos.core.context import ChaosContext
@@ -220,7 +221,7 @@ class ChaosInjector:
         for chaos in self._user_chaos:
             if chaos.should_trigger(0):  # User input doesn't depend on call count
                 result = chaos.apply(query=query, ctx=self._ctx)
-                if result.action == "mutate" and result.mutated is not None:
+                if result.action == ChaosAction.MUTATE and result.mutated is not None:
                     return result.mutated, chaos
 
         return query, None

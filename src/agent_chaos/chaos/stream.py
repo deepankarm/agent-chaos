@@ -1,15 +1,20 @@
 """Stream chaos types — affect LLM streaming responses."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
+from agent_chaos.types import ChaosAction
 
 
-@dataclass
-class StreamChaos:
+class StreamChaos(BaseModel):
     """Base class for stream chaos."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     after_chunks: int = 0
     probability: float = 1.0
@@ -21,9 +26,11 @@ class StreamChaos:
     on_turn: int | None = None
     after_turns: int | None = None
     between_turns: tuple[int, int] | None = None
-    _trigger: TriggerConfig = field(init=False)
 
-    def __post_init__(self):
+    _trigger: TriggerConfig = PrivateAttr()
+
+    @model_validator(mode="after")
+    def _build_trigger(self) -> StreamChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -34,6 +41,7 @@ class StreamChaos:
             after_turns=self.after_turns,
             between_turns=self.between_turns,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -64,7 +72,6 @@ class StreamChaos:
         return ChaosResult.proceed()
 
 
-@dataclass
 class StreamCutChaos(StreamChaos):
     """Abruptly cuts stream after N chunks."""
 
@@ -82,9 +89,10 @@ class StreamCutChaos(StreamChaos):
         return ChaosResult.raise_exception(exc)
 
 
-@dataclass
 class StreamHangChaos(StreamChaos):
     """Hangs stream after N chunks (blocks forever)."""
+
+    hang_seconds: float = 60.0
 
     def __str__(self) -> str:
         return f"stream_hang(after {self.after_chunks} chunks)"
@@ -92,10 +100,9 @@ class StreamHangChaos(StreamChaos):
     def apply(self, **kwargs: Any) -> ChaosResult:
         # The actual hanging is done in the stream wrapper
         # This just signals that we should hang
-        return ChaosResult(action="hang")
+        return ChaosResult(action=ChaosAction.HANG)
 
 
-@dataclass
 class SlowTTFTChaos(StreamChaos):
     """Delays time-to-first-token."""
 
@@ -106,10 +113,9 @@ class SlowTTFTChaos(StreamChaos):
         return f"slow_ttft({self.delay}s)"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
-        return ChaosResult(action="delay", mutated=self.delay)
+        return ChaosResult(action=ChaosAction.DELAY, mutated=self.delay)
 
 
-@dataclass
 class SlowChunksChaos(StreamChaos):
     """Adds delay between chunks."""
 
@@ -119,7 +125,7 @@ class SlowChunksChaos(StreamChaos):
         return f"slow_chunks({self.delay}s)"
 
     def apply(self, **kwargs: Any) -> ChaosResult:
-        return ChaosResult(action="delay", mutated=self.delay)
+        return ChaosResult(action=ChaosAction.DELAY, mutated=self.delay)
 
 
 # Factory functions

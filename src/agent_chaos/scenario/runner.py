@@ -350,9 +350,9 @@ def run_scenario(
                 "error": ctx.error,
                 "llm_calls_total": ctx.metrics.total_calls,
                 "llm_calls_failed": sum(
-                    1 for c in ctx.metrics.call_history if not c.get("success", True)
+                    1 for c in ctx.metrics.history if not c.success
                 ),
-                "faults_injected_total": len(ctx.metrics.faults_injected),
+                "faults_injected_total": len(ctx.metrics.faults),
                 "avg_latency_s": ctx.metrics.avg_latency,
                 "success_rate": ctx.metrics.success_rate,
                 "avg_ttft_s": ctx.metrics.avg_ttft,
@@ -369,12 +369,12 @@ def run_scenario(
                 "avg_tokens_per_call": ctx.metrics.avg_tokens_per_call,
                 "max_tokens_single_call": ctx.metrics.max_tokens_single_call,
                 # System prompt (captured from first LLM call)
-                "system_prompt": ctx.metrics.system_prompt,
+                "system_prompt": ctx.metrics.conv.system_prompt,
             }
         # Store ctx values before exiting the with block
         agent_input = ctx.agent_input
         agent_output = ctx.agent_output
-        conversation = ctx.metrics.conversation.copy()
+        conversation = ctx.metrics.conv.entries.copy()
         turn_results_data = [
             {
                 "turn_number": tr.turn_number,

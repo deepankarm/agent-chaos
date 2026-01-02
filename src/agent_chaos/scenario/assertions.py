@@ -83,8 +83,8 @@ class MaxFailedCalls:
     name: str = "max_failed_calls"
 
     def __call__(self, ctx: ChaosContext) -> AssertionResult:
-        history = getattr(ctx.metrics, "call_history", []) or []
-        failed = sum(1 for c in history if not c.get("success", True))
+        history = ctx.metrics.history or []
+        failed = sum(1 for c in history if not c.success)
         passed = failed <= self.max_failed
         return AssertionResult(
             name=self.name,
@@ -122,7 +122,7 @@ class MinChaosInjected:
     name: str = "min_chaos_injected"
 
     def __call__(self, ctx: ChaosContext) -> AssertionResult:
-        chaos_injected = ctx.metrics.faults_injected
+        chaos_injected = ctx.metrics.faults
         count = len(chaos_injected)
         passed = count >= self.min_chaos
 
@@ -154,7 +154,7 @@ class MinChaosInjected:
 
         # Get actual tool calls from conversation
         tool_calls_by_turn: dict[int, list[str]] = {}
-        for entry in ctx.metrics.conversation:
+        for entry in ctx.metrics.conv.entries:
             if entry.get("type") == "tool_call":
                 turn = entry.get("turn_number", 0)
                 tool = entry.get("tool_name", "unknown")
@@ -707,9 +707,8 @@ class MaxInputTokensPerCall:
 
     def __call__(self, ctx: ChaosContext) -> AssertionResult:
         max_call = 0
-        for call in ctx.metrics.call_history:
-            usage = call.get("usage") or {}
-            input_tok = usage.get("input_tokens") or 0
+        for call in ctx.metrics.history:
+            input_tok = call.usage.get("input_tokens") or 0
             if input_tok > max_call:
                 max_call = input_tok
 
@@ -740,9 +739,8 @@ class MaxOutputTokensPerCall:
 
     def __call__(self, ctx: ChaosContext) -> AssertionResult:
         max_call = 0
-        for call in ctx.metrics.call_history:
-            usage = call.get("usage") or {}
-            output_tok = usage.get("output_tokens") or 0
+        for call in ctx.metrics.history:
+            output_tok = call.usage.get("output_tokens") or 0
             if output_tok > max_call:
                 max_call = output_tok
 

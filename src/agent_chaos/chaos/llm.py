@@ -1,9 +1,11 @@
 """LLM chaos types — raise exceptions at the LLM boundary."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from agent_chaos.chaos.base import ChaosPoint, ChaosResult, TriggerConfig
 from agent_chaos.chaos.builder import ChaosBuilder
@@ -15,9 +17,10 @@ def _fake_response(status_code: int) -> httpx.Response:
     return httpx.Response(status_code=status_code, request=request)
 
 
-@dataclass
-class LLMChaos:
+class LLMChaos(BaseModel):
     """Base class for LLM chaos that raises exceptions."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     message: str = ""
     on_call: int | None = None
@@ -29,9 +32,11 @@ class LLMChaos:
     on_turn: int | None = None
     after_turns: int | None = None
     between_turns: tuple[int, int] | None = None
-    _trigger: TriggerConfig = field(init=False)
 
-    def __post_init__(self):
+    _trigger: TriggerConfig = PrivateAttr()
+
+    @model_validator(mode="after")
+    def _build_trigger(self) -> LLMChaos:
         self._trigger = TriggerConfig(
             on_call=self.on_call,
             after_calls=self.after_calls,
@@ -42,6 +47,7 @@ class LLMChaos:
             after_turns=self.after_turns,
             between_turns=self.between_turns,
         )
+        return self
 
     @property
     def point(self) -> ChaosPoint:
@@ -68,7 +74,6 @@ class LLMChaos:
         raise NotImplementedError
 
 
-@dataclass
 class RateLimitChaos(LLMChaos):
     """Simulates rate limit errors (429)."""
 
@@ -100,16 +105,15 @@ class RateLimitChaos(LLMChaos):
         raise NotImplementedError(f"Provider {provider} not implemented")
 
 
-@dataclass
 class TimeoutChaos(LLMChaos):
     """Simulates request timeout."""
 
-    delay: float = 30.0
+    timeout_seconds: float = 30.0
     message: str = "Request timed out"
 
     def __str__(self) -> str:
         trigger = self._describe_trigger()
-        return f"llm_timeout({self.delay}s){trigger}"
+        return f"llm_timeout({self.timeout_seconds}s){trigger}"
 
     def _describe_trigger(self) -> str:
         if self.on_call is not None:
@@ -128,7 +132,6 @@ class TimeoutChaos(LLMChaos):
         raise NotImplementedError(f"Provider {provider} not implemented")
 
 
-@dataclass
 class ServerErrorChaos(LLMChaos):
     """Simulates 500 internal server error."""
 
@@ -162,7 +165,6 @@ class ServerErrorChaos(LLMChaos):
         raise NotImplementedError(f"Provider {provider} not implemented")
 
 
-@dataclass
 class AuthErrorChaos(LLMChaos):
     """Simulates 401 authentication error."""
 
@@ -195,7 +197,6 @@ class AuthErrorChaos(LLMChaos):
         raise NotImplementedError(f"Provider {provider} not implemented")
 
 
-@dataclass
 class ContextLengthChaos(LLMChaos):
     """Simulates context length exceeded error."""
 
