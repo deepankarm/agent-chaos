@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic-ai>=1.39.0",
+    "pydantic-evals>=1.39.0",
     "agent-chaos @ file:///${PROJECT_ROOT}/../..",
     "deepeval>=3.7.6",
     "anthropic>=0.75.0",

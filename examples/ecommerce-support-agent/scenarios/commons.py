@@ -1,7 +1,7 @@
 """Shared utilities for e-commerce support agent scenarios.
 
 This module contains:
-- DeepEval metrics (LLM-as-judge evaluation)
+- LLM-as-judge metrics (DeepEval and Pydantic Evals options)
 - Dynamic input generators (LLM-powered user simulation)
 - Tool mutators (chaos injection functions)
 - Semantic chaos generators
@@ -12,152 +12,288 @@ These are imported by baselines.py, quickstart.py, resilience.py, and fuzzing.py
 from __future__ import annotations
 
 import json
+import os
 
 import anthropic
 from agent_chaos import ChaosContext, TurnResult
-from agent_chaos.integrations.deepeval import as_assertion
+from agent_chaos.integrations.deepeval import as_assertion as deepeval_as_assertion
+from agent_chaos.integrations.pydantic_evals import (
+    as_assertion as pydantic_as_assertion,
+)
 
 from agent import get_tools
+
+# =============================================================================
+# Eval Provider Selection
+# =============================================================================
+# Set EVAL_PROVIDER=pydantic to use pydantic-evals instead of deepeval
+EVAL_PROVIDER = os.environ.get("EVAL_PROVIDER", "deepeval").lower()
+
+# =============================================================================
+# Shared Rubrics (used by both DeepEval and Pydantic Evals)
+# =============================================================================
+
+ERROR_HANDLING_RUBRIC = """Evaluate how well the agent handled errors or unexpected situations.
+
+IMPORTANT: Check the CONTEXT/metadata field first to see what errors were injected:
+- If context says "No errors were injected", then evaluate whether the agent
+  successfully completed the task (this is a baseline/happy-path scenario)
+- If context lists specific errors (tool failures, rate limits, etc.), evaluate
+  how gracefully the agent handled those specific errors
+
+For error scenarios, a good response should:
+1. Acknowledge when something went wrong (if applicable)
+2. Not pretend to have information it couldn't retrieve
+3. Offer alternatives or next steps when possible
+4. Maintain a helpful, professional tone
+5. Not expose internal error messages or stack traces to the customer
+
+For baseline (no errors), a good response should:
+1. Successfully address the customer's request
+2. Provide accurate information from tools
+3. Complete the task professionally"""
+
+RESPONSE_COHERENCE_RUBRIC = """Evaluate whether the agent's response is coherent and understandable.
+
+Check that:
+1. The response is in proper English (or appropriate language)
+2. Sentences are grammatically correct and make sense
+3. The response addresses the customer's current message (not random text)
+4. There's no garbled, truncated, or nonsensical output
+
+IMPORTANT: Use context from prior conversation to understand the flow.
+- It's perfectly fine to reference previous actions (e.g., mentioning a refund
+  that was processed earlier, then escalating as the customer requested)
+- The response should make sense given the conversation history
+- Multiple actions in sequence (process refund, then escalate) is coherent behavior
+
+This is a basic sanity check - focus on language quality and relevance,
+not business logic. Even if the agent couldn't help, it should respond coherently."""
+
+TASK_COMPLETION_RUBRIC = """Evaluate whether the customer support agent successfully addressed
+the customer's request.
+
+Consider:
+1. Did the agent understand what the customer wanted?
+2. Did the agent take appropriate actions (lookup order, check refund, etc)?
+3. Did the agent provide a clear, helpful response?
+4. If there were errors, did the agent handle them gracefully?"""
+
+DATA_SANITY_RUBRIC = """Evaluate whether the agent critically assessed data before relaying it.
+
+When data seems implausible, alarming, or contradictory, a good agent should:
+1. NOT blindly relay alarming information (e.g., "contraband detected" for a laptop stand)
+2. Acknowledge uncertainty or potential system errors
+3. Offer to verify or investigate further
+4. Not cause unnecessary panic with unverified alarming data
+
+RED FLAGS the agent should catch:
+- Customs/contraband issues for domestic orders of normal products
+- Impossible dates (delivery before order date, dates in far future/past)
+- Negative prices or refund amounts
+- Status changes that don't make sense (e.g., delivered → shipped)
+
+Score LOW if the agent presents clearly implausible data as factual.
+Score HIGH if the agent questions suspicious data or caveats it appropriately."""
+
+# Shared thresholds
+ERROR_HANDLING_THRESHOLD = 0.5
+RESPONSE_COHERENCE_THRESHOLD = 0.7
+TASK_COMPLETION_THRESHOLD = 0.6
+DATA_SANITY_THRESHOLD = 0.5
 
 # =============================================================================
 # DeepEval Metrics (LLM-as-judge evaluation)
 # =============================================================================
 
 
-def _get_eval_model():
+def _deepeval_model():
     """Shared evaluation model for all metrics."""
     from deepeval.models import AnthropicModel
 
     return AnthropicModel(model="claude-sonnet-4-20250514", temperature=0)
 
 
-def get_error_handling_metric():
+def deepeval_error_handling_metric():
     """Evaluate how well the agent handles errors gracefully."""
     from deepeval.metrics import GEval
     from deepeval.test_case import LLMTestCaseParams
 
     return GEval(
         name="error-handling",
-        criteria="""Evaluate how well the agent handled errors or unexpected situations.
-
-        IMPORTANT: Check the CONTEXT field first to see what errors were injected:
-        - If context says "No errors were injected", then evaluate whether the agent
-          successfully completed the task (this is a baseline/happy-path scenario)
-        - If context lists specific errors (tool failures, rate limits, etc.), evaluate
-          how gracefully the agent handled those specific errors
-
-        For error scenarios, a good response should:
-        1. Acknowledge when something went wrong (if applicable)
-        2. Not pretend to have information it couldn't retrieve
-        3. Offer alternatives or next steps when possible
-        4. Maintain a helpful, professional tone
-        5. Not expose internal error messages or stack traces to the customer
-
-        For baseline (no errors), a good response should:
-        1. Successfully address the customer's request
-        2. Provide accurate information from tools
-        3. Complete the task professionally""",
+        criteria=ERROR_HANDLING_RUBRIC,
         evaluation_params=[
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
             LLMTestCaseParams.CONTEXT,
         ],
-        threshold=0.5,
-        model=_get_eval_model(),
+        threshold=ERROR_HANDLING_THRESHOLD,
+        model=_deepeval_model(),
     )
 
 
-def get_response_coherence_metric():
+def deepeval_response_coherence_metric():
     """Evaluate whether responses are coherent (not gibberish)."""
     from deepeval.metrics import GEval
     from deepeval.test_case import LLMTestCaseParams
 
     return GEval(
         name="response-coherence",
-        criteria="""Evaluate whether the agent's response is coherent and understandable.
-        Check that:
-        1. The response is in proper English (or appropriate language)
-        2. Sentences are grammatically correct and make sense
-        3. The response addresses the customer's current message (not random text)
-        4. There's no garbled, truncated, or nonsensical output
-
-        IMPORTANT: Use context from prior conversation to understand the flow.
-        - It's perfectly fine to reference previous actions (e.g., mentioning a refund
-          that was processed earlier, then escalating as the customer requested)
-        - The response should make sense given the conversation history
-        - Multiple actions in sequence (process refund, then escalate) is coherent behavior
-
-        This is a basic sanity check - focus on language quality and relevance,
-        not business logic. Even if the agent couldn't help, it should respond coherently.""",
+        criteria=RESPONSE_COHERENCE_RUBRIC,
         evaluation_params=[
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
             LLMTestCaseParams.CONTEXT,
         ],
-        threshold=0.7,
-        model=_get_eval_model(),
+        threshold=RESPONSE_COHERENCE_THRESHOLD,
+        model=_deepeval_model(),
     )
 
 
-def get_task_completion_metric():
+def deepeval_task_completion_metric():
     """Evaluate whether the agent successfully addressed the request."""
     from deepeval.metrics import GEval
     from deepeval.test_case import LLMTestCaseParams
 
     return GEval(
         name="task-completion",
-        criteria="""Evaluate whether the customer support agent successfully addressed
-        the customer's request. Consider:
-        1. Did the agent understand what the customer wanted?
-        2. Did the agent take appropriate actions (lookup order, check refund, etc)?
-        3. Did the agent provide a clear, helpful response?
-        4. If there were errors, did the agent handle them gracefully?""",
+        criteria=TASK_COMPLETION_RUBRIC,
         evaluation_params=[
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
         ],
-        threshold=0.6,
-        model=_get_eval_model(),
+        threshold=TASK_COMPLETION_THRESHOLD,
+        model=_deepeval_model(),
     )
 
 
-def get_data_sanity_metric():
+def deepeval_data_sanity_metric():
     """Evaluate whether the agent validates suspicious/implausible data."""
     from deepeval.metrics import GEval
     from deepeval.test_case import LLMTestCaseParams
 
     return GEval(
         name="data-sanity",
-        criteria="""Evaluate whether the agent critically assessed data before relaying it.
-        When data seems implausible, alarming, or contradictory, a good agent should:
-        1. NOT blindly relay alarming information (e.g., "contraband detected" for a laptop stand)
-        2. Acknowledge uncertainty or potential system errors
-        3. Offer to verify or investigate further
-        4. Not cause unnecessary panic with unverified alarming data
-
-        RED FLAGS the agent should catch:
-        - Customs/contraband issues for domestic orders of normal products
-        - Impossible dates (delivery before order date, dates in far future/past)
-        - Negative prices or refund amounts
-        - Status changes that don't make sense (e.g., delivered → shipped)
-
-        Score LOW if the agent presents clearly implausible data as factual.
-        Score HIGH if the agent questions suspicious data or caveats it appropriately.""",
+        criteria=DATA_SANITY_RUBRIC,
         evaluation_params=[
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
             LLMTestCaseParams.CONTEXT,
         ],
-        threshold=0.5,
-        model=_get_eval_model(),
+        threshold=DATA_SANITY_THRESHOLD,
+        model=_deepeval_model(),
     )
 
 
-# Pre-wrapped assertions for convenience
-turn_coherence = as_assertion(get_response_coherence_metric, name="turn-coherence")
-error_handling = as_assertion(get_error_handling_metric, name="error-handling")
-task_completion = as_assertion(get_task_completion_metric, name="task-completion")
-data_sanity = as_assertion(get_data_sanity_metric, name="data-sanity")
+# Pre-wrapped DeepEval assertions
+_deepeval_turn_coherence = deepeval_as_assertion(
+    deepeval_response_coherence_metric, name="turn-coherence"
+)
+_deepeval_error_handling = deepeval_as_assertion(
+    deepeval_error_handling_metric, name="error-handling"
+)
+_deepeval_task_completion = deepeval_as_assertion(
+    deepeval_task_completion_metric, name="task-completion"
+)
+_deepeval_data_sanity = deepeval_as_assertion(
+    deepeval_data_sanity_metric, name="data-sanity"
+)
+
+
+# =============================================================================
+# Pydantic Evals Metrics (alternative LLM-as-judge)
+# =============================================================================
+# Pydantic Evals offers a simpler API with LLMJudge - just provide a rubric.
+# It uses pydantic-ai under the hood and supports the same LLM providers.
+
+
+def _pydantic_model() -> str:
+    """Model string for pydantic-evals LLMJudge."""
+    return "anthropic:claude-sonnet-4-5"
+
+
+def pydantic_error_handling_judge():
+    """LLMJudge for error handling evaluation."""
+    from pydantic_evals.evaluators import LLMJudge
+
+    return LLMJudge(
+        rubric=ERROR_HANDLING_RUBRIC,
+        model=_pydantic_model(),
+        include_input=True,
+    )
+
+
+def pydantic_response_coherence_judge():
+    """LLMJudge for response coherence evaluation."""
+    from pydantic_evals.evaluators import LLMJudge
+
+    return LLMJudge(
+        rubric=RESPONSE_COHERENCE_RUBRIC,
+        model=_pydantic_model(),
+        include_input=True,
+    )
+
+
+def pydantic_task_completion_judge():
+    """LLMJudge for task completion evaluation."""
+    from pydantic_evals.evaluators import LLMJudge
+
+    return LLMJudge(
+        rubric=TASK_COMPLETION_RUBRIC,
+        model=_pydantic_model(),
+        include_input=True,
+    )
+
+
+def pydantic_data_sanity_judge():
+    """LLMJudge for data sanity evaluation."""
+    from pydantic_evals.evaluators import LLMJudge
+
+    return LLMJudge(
+        rubric=DATA_SANITY_RUBRIC,
+        model=_pydantic_model(),
+        include_input=True,
+    )
+
+
+# Pre-wrapped Pydantic Evals assertions
+_pydantic_turn_coherence = pydantic_as_assertion(
+    pydantic_response_coherence_judge(),
+    threshold=RESPONSE_COHERENCE_THRESHOLD,
+    name="turn-coherence",
+)
+_pydantic_error_handling = pydantic_as_assertion(
+    pydantic_error_handling_judge(),
+    threshold=ERROR_HANDLING_THRESHOLD,
+    name="error-handling",
+)
+_pydantic_task_completion = pydantic_as_assertion(
+    pydantic_task_completion_judge(),
+    threshold=TASK_COMPLETION_THRESHOLD,
+    name="task-completion",
+)
+_pydantic_data_sanity = pydantic_as_assertion(
+    pydantic_data_sanity_judge(),
+    threshold=DATA_SANITY_THRESHOLD,
+    name="data-sanity",
+)
+
+
+# =============================================================================
+# Exported Assertions (based on EVAL_PROVIDER)
+# =============================================================================
+# Use EVAL_PROVIDER=pydantic to switch to pydantic-evals
+
+if EVAL_PROVIDER == "pydantic":
+    turn_coherence = _pydantic_turn_coherence
+    error_handling = _pydantic_error_handling
+    task_completion = _pydantic_task_completion
+    data_sanity = _pydantic_data_sanity
+else:
+    turn_coherence = _deepeval_turn_coherence
+    error_handling = _deepeval_error_handling
+    task_completion = _deepeval_task_completion
+    data_sanity = _deepeval_data_sanity
 
 
 # =============================================================================
