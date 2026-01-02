@@ -38,7 +38,7 @@ Tools fail in obvious ways (timeouts, errors), but also in subtle ways: empty re
 
 Traditional chaos engineering tools (Chaos Monkey, Gremlin) operate at infrastructure: network partitions, pod failures. They can't corrupt a tool result or cut an LLM stream mid-response.
 
-**agent-chaos** injects these failures so you can test how your agent handles them before users find out. It integrates with evaluation frameworks like DeepEval, so you can inject chaos and judge the quality of your agent's response.
+**agent-chaos** injects these failures so you can test how your agent handles them before users find out. It integrates with LLM-as-judge evaluation frameworks like [DeepEval](https://github.com/confident-ai/deepeval) and [Pydantic Evals](https://ai.pydantic.dev/evals/), so you can inject chaos and judge the quality of your agent's response.
 
 ---
 
@@ -79,7 +79,7 @@ baseline.variant(
 
 agent-chaos provides chaos injectors for LLM failures (`llm_rate_limit`, `llm_server_error`, `llm_timeout`), tool failures (`tool_error`, `tool_timeout`), data corruption (`tool_mutate`), and more. These are composable and support targeting specific tools, turns, or call counts.
 
-Built-in assertions include `MaxTotalLLMCalls`, `AllTurnsComplete`, `TokenBurstDetection`, among others. For semantic evaluation, agent-chaos optionally integrates with [DeepEval](https://github.com/confident-ai/deepeval), letting you use any DeepEval metric (like `GEval`) as an assertion.
+Built-in assertions include `MaxTotalLLMCalls`, `AllTurnsComplete`, `TokenBurstDetection`, among others. For semantic evaluation, agent-chaos integrates with [DeepEval](https://github.com/confident-ai/deepeval) and [Pydantic Evals](https://ai.pydantic.dev/evals/), letting you use LLM-as-judge metrics as assertions.
 
 Both chaos and assertions can be applied per-scenario or per-turn using the `at()` helper:
 
@@ -87,19 +87,38 @@ Both chaos and assertions can be applied per-scenario or per-turn using the `at(
 from agent_chaos import at
 from agent_chaos.chaos import tool_error
 from agent_chaos.scenario import CompletesWithin
+
+# With DeepEval
 from agent_chaos.integrations.deepeval import as_assertion
 from deepeval.metrics import GEval
 
-# Inject chaos only on turn 2
 baseline.variant(
     name="check-refund-fails",
     turns=[
         at(
-            2, 
+            2,
             chaos=[tool_error("Service unavailable").for_tool("check_refund")],
             assertions=[
                 CompletesWithin(60.0),
-                as_assertion(GEval(name="task-completion", criteria="Did the agent complete the user's request?")),
+                as_assertion(GEval(name="task-completion", criteria="Did the agent complete the task?")),
+            ],
+        ),
+    ],
+)
+
+# Or with Pydantic Evals
+from agent_chaos.integrations.pydantic_evals import as_assertion
+from pydantic_evals.evaluators import LLMJudge
+
+baseline.variant(
+    name="check-refund-fails-pydantic",
+    turns=[
+        at(
+            2,
+            chaos=[tool_error("Service unavailable").for_tool("check_refund")],
+            assertions=[
+                CompletesWithin(60.0),
+                as_assertion(LLMJudge(rubric="Did the agent complete the task?"), threshold=0.7),
             ],
         ),
     ],
@@ -170,10 +189,9 @@ Under active development.
 - LLM chaos (rate limits, server errors, timeouts, stream cut/hang, slow chunks)
 - Tool chaos (errors, timeouts, mutations)
 - User input chaos (prompt injections)
-- Optional DeepEval integration for LLM-as-judge assertions
+- LLM-as-judge assertions via [DeepEval](https://github.com/confident-ai/deepeval) and [Pydantic Evals](https://ai.pydantic.dev/evals/)
 - Scenario fuzzing
 
 **Planned:**
 - OpenAI, Gemini models
-- Integration with other evaluation tools
 - More chaos types

@@ -163,7 +163,9 @@ def _extract_chaos_context(ctx: "ChaosContext", turn: int | None = None) -> str 
             if target:
                 chaos_events.append(f"- {fault_type} on {target} (turn {event_turn})")
             else:
-                chaos_events.append(f"- {fault_type} at {chaos_point} (turn {event_turn})")
+                chaos_events.append(
+                    f"- {fault_type} at {chaos_point} (turn {event_turn})"
+                )
 
     if not chaos_events:
         return None
@@ -695,7 +697,3 @@ def as_assertion(
         turn=turn,
         name=name,
     )
-
-
-# Convenience aliases
-wrap_metric = as_assertion

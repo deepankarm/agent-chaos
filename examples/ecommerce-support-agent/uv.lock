@@ -20,7 +20,7 @@ wheels = [
 
 [[package]]
 name = "agent-chaos"
-version = "0.1.2"
+version = "0.1.3"
 source = { directory = "../../" }
 dependencies = [
     { name = "fastapi" },
@@ -49,6 +49,7 @@ provides-extras = ["anthropic", "openai", "gemini", "all"]
 [package.metadata.requires-dev]
 dev = [
     { name = "deepeval", specifier = ">=3.7.6" },
+    { name = "pydantic-evals", specifier = ">=1.39.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "pytest-cov", specifier = ">=4.0" },
@@ -634,6 +635,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "deepeval" },
     { name = "pydantic-ai" },
+    { name = "pydantic-evals" },
 ]
 
 [package.dev-dependencies]
@@ -647,6 +649,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.75.0" },
     { name = "deepeval", specifier = ">=3.7.6" },
     { name = "pydantic-ai", specifier = ">=1.39.0" },
+    { name = "pydantic-evals", specifier = ">=1.39.0" },
 ]
 
 [package.metadata.requires-dev]
