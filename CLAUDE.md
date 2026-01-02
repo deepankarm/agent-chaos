@@ -2,6 +2,47 @@
 
 Chaos engineering framework for LLM agents. Injects faults into LLM API calls to test agent resilience.
 
+## Installation
+
+```bash
+pip install agent-chaos[anthropic]    # With Anthropic support
+pip install agent-chaos[all]          # All providers (anthropic, openai, gemini)
+```
+
+## Quick Start
+
+```python
+# scenarios/test_weather.py
+from agent_chaos.scenario import ChaosScenario, Turn, run_scenario
+from agent_chaos.chaos import llm_rate_limit, tool_error
+
+# 1. Define your agent (any callable that uses an LLM client)
+def my_agent(ctx, turn_input):
+    # Your agent code here - uses anthropic/openai client
+    response = client.messages.create(...)
+    return {"response": response.content[0].text}
+
+# 2. Create a scenario
+scenario = ChaosScenario(
+    name="rate-limit-recovery",
+    description="Agent handles 429 gracefully",
+    agent=my_agent,
+    turns=[Turn("What's the weather in NYC?")],
+    chaos=[llm_rate_limit().after_calls(1)],  # Inject 429 after first call
+    assertions=[CompletesWithin(30.0)],
+)
+
+# 3. Run it
+report = run_scenario(scenario)
+print(f"Passed: {report.passed}")
+```
+
+```bash
+# Run from CLI
+agent-chaos run scenarios/test_weather.py
+agent-chaos ui .agent_chaos_runs  # View results
+```
+
 ## Project Structure
 
 ```
