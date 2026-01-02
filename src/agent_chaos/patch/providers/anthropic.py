@@ -105,7 +105,7 @@ class AnthropicPatcher(BaseProviderPatcher):
                     if chaos_result.exception:
                         recorder.record_fault(
                             call_id,
-                            chaos_result.exception,
+                            type(chaos_result.exception).__name__,
                             provider="anthropic",
                             chaos_point="LLM",
                         )
@@ -179,7 +179,7 @@ class AnthropicPatcher(BaseProviderPatcher):
                 if chaos_result.exception:
                     recorder.record_fault(
                         call_id,
-                        chaos_result.exception,
+                        type(chaos_result.exception).__name__,
                         provider="anthropic",
                         chaos_point="LLM",
                     )
@@ -240,7 +240,7 @@ class AnthropicPatcher(BaseProviderPatcher):
                     if chaos_result.exception:
                         recorder.record_fault(
                             call_id,
-                            chaos_result.exception,
+                            type(chaos_result.exception).__name__,
                             provider="anthropic",
                             chaos_point="LLM",
                         )
@@ -551,7 +551,7 @@ def _apply_user_chaos_to_messages(
 
     recorder.record_fault(
         "user_input_mutation",
-        chaos_obj,
+        type(chaos_obj).__name__,
         provider="",
         chaos_point="USER_INPUT",
         chaos_fn_name=chaos_fn_name,
@@ -649,7 +649,7 @@ def _maybe_mutate_context(
 
             recorder.record_fault(
                 "context_mutation",
-                chaos_obj,
+                type(chaos_obj).__name__,
                 provider="anthropic",
                 chaos_point="CONTEXT",
                 chaos_fn_name=chaos_fn_name,
@@ -706,7 +706,7 @@ def _execute_with_chaos_sync(
         if chaos_result.exception:
             recorder.record_fault(
                 call_id,
-                chaos_result.exception,
+                type(chaos_result.exception).__name__,
                 provider="anthropic",
                 chaos_point="LLM",
             )
@@ -765,7 +765,7 @@ async def _execute_with_chaos_async(
         if chaos_result.exception:
             recorder.record_fault(
                 call_id,
-                chaos_result.exception,
+                type(chaos_result.exception).__name__,
                 provider="anthropic",
                 chaos_point="LLM",
             )
@@ -847,7 +847,7 @@ def _mutate_anthropic_tool_results(
                                         chaos_fn_doc = doc.strip().split("\n")[0]
                                 recorder.record_fault(
                                     "tool_mutation",
-                                    chaos_obj,
+                                    type(chaos_obj).__name__,
                                     provider="anthropic",
                                     chaos_point="TOOL",
                                     chaos_fn_name=chaos_fn_name,
